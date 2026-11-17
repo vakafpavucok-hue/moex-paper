@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MOEX Paper">
+<title>MOEX Paper — учебный терминал</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{
+  --bg:#0b0f14; --panel:#121922; --panel2:#17202b; --line:#223041; --text:#e6edf3; --muted:#8b98a5;
+  --up:#21c07a; --dn:#f0525a; --acc:#3b8bf6; --warn:#f5a524;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif}
+body{padding-top:calc(52px + var(--sat));padding-bottom:calc(64px + var(--sab))}
+.num,.px,td,.mono{font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;outline:none}
+input:focus,select:focus{border-color:var(--acc)}
+.hidden{display:none!important}
+.muted{color:var(--muted)} .small{font-size:12px} .up{color:var(--up)} .dn{color:var(--dn)} .warn{color:var(--warn)}
+header.top{position:fixed;top:0;left:0;right:0;z-index:20;height:calc(52px + var(--sat));padding:var(--sat) 12px 0;display:flex;align-items:center;gap:10px;background:rgba(11,15,20,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.brand{font-weight:800;letter-spacing:.3px}
+.brand span{color:var(--acc)}
+@media(max-width:380px){.brand{display:none}}
+.hdr-eq{flex:1;display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+.hdr-eq b{font-size:15px}
+.badge{font-size:11px;padding:3px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.badge.rt{color:var(--up);border-color:rgba(33,192,122,.4)}
+.icon-btn{width:36px;height:36px;border-radius:10px;background:var(--panel);border:1px solid var(--line);font-size:18px}
+main{max-width:1180px;margin:0 auto;padding:10px}
+.view{display:none}.view.active{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.card-title{font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.banners>div{border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:13px}
+.b-err{background:rgba(240,82,90,.12);border:1px solid rgba(240,82,90,.4)}
+.b-warn{background:rgba(245,165,36,.12);border:1px solid rgba(245,165,36,.4)}
+.b-info{background:rgba(59,139,246,.1);border:1px solid rgba(59,139,246,.35)}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:20;display:flex;background:rgba(18,25,34,.97);border-top:1px solid var(--line);padding-bottom:var(--sab)}
+nav.tabs button{flex:1;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--muted);font-size:11px}
+nav.tabs button .ic{line-height:0}
+nav.tabs button.active{color:var(--text)}
+nav.tabs button.active .ic{color:var(--acc)}
+/* market list */
+.list .row{display:grid;grid-template-columns:1.3fr 1fr .9fr;gap:8px;align-items:center;padding:11px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.list .row:last-child{border-bottom:0}
+.row .tk{font-weight:700}
+.row .nm{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .c2{text-align:right}
+.row .c3{text-align:right;font-size:12px;color:var(--muted)}
+.chip{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px;vertical-align:1px}
+.chip.l{background:rgba(33,192,122,.15);color:var(--up)} .chip.s{background:rgba(240,82,90,.15);color:var(--dn)} .chip.o{background:rgba(59,139,246,.15);color:var(--acc)}
+/* trade */
+.t-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.t-head select{width:auto;min-width:150px;font-weight:700}
+.t-last{font-size:24px;font-weight:800}
+.t-stats{width:100%;display:flex;flex-wrap:wrap;gap:4px 14px}
+.t-grid{display:flex;flex-direction:column}
+.t-col{display:contents}
+.c-chart{order:1}.c-order{order:2}.c-pos{order:3}.c-ords{order:4}.c-book{order:5}
+@media(min-width:900px){.t-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:10px;align-items:start}.t-col{display:block}}
+.intervals{display:flex;gap:6px;margin-bottom:8px}
+.intervals button,.seg button,.pct button{padding:7px 10px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);font-size:13px}
+.intervals button.active,.seg button.active{background:var(--acc);border-color:var(--acc);color:#fff}
+.chart{height:340px;width:100%}
+@media(min-width:900px){.chart{height:460px}}
+.seg{display:flex;gap:6px;margin-bottom:10px}
+.seg button{flex:1}
+.seg.side button.active.buy{background:var(--up);border-color:var(--up)}
+.seg.side button.active.sell{background:var(--dn);border-color:var(--dn)}
+label.f{display:block;margin-bottom:10px;font-size:12px;color:var(--muted)}
+label.f input{margin-top:4px;font-size:16px;color:var(--text)}
+.qty{display:flex;gap:6px;margin-top:4px}
+.qty button{width:46px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-size:20px}
+.qty input{margin:0;text-align:center}
+.pct{display:flex;gap:6px;margin-bottom:10px}.pct button{flex:1}
+.o-info{background:var(--panel2);border-radius:10px;padding:9px 10px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px}
+.o-info span:nth-child(even){text-align:right;color:var(--text)}
+.submit{width:100%;padding:14px;border-radius:12px;font-weight:800;font-size:16px;color:#fff}
+.submit.buy{background:var(--up)} .submit.sell{background:var(--dn)}
+.submit:disabled{opacity:.5}
+.book table{width:100%;border-collapse:collapse;font-size:13px}
+.book td{padding:3px 6px;position:relative}
+.book td.q{text-align:right;color:var(--muted)}
+.book .bar{position:absolute;top:2px;bottom:2px;right:0;opacity:.18;border-radius:3px}
+.book tr.a td.p{color:var(--dn)} .book tr.b td.p{color:var(--up)}
+.book tr.mid td{border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);text-align:center;color:var(--muted);font-size:12px}
+/* generic tables */
+.kv{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:700px){.kv{grid-template-columns:repeat(4,1fr)}}
+.kv>div{background:var(--panel2);border-radius:10px;padding:9px 10px}
+.kv .k{font-size:11px;color:var(--muted)} .kv .v{font-weight:700;font-size:15px;margin-top:2px}
+.item{padding:10px 2px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
+.item:last-child{border-bottom:0}
+.item .t1{font-weight:700}
+.item .sub{font-size:12px;color:var(--muted)}
+.item .r{text-align:right}
+.btn{padding:8px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-size:13px}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.red{border-color:rgba(240,82,90,.6);color:var(--dn)}
+.btn-row{display:flex;flex-wrap:wrap;gap:8px}
+.empty{color:var(--muted);text-align:center;padding:18px 6px;font-size:13px}
+.eq-chart{height:220px}
+.tabs2{display:flex;gap:6px;margin-bottom:10px}
+.tabs2 button{padding:7px 12px;border-radius:9px;background:var(--panel2);border:1px solid var(--line)}
+.tabs2 button.active{background:var(--acc);border-color:var(--acc);color:#fff}
+/* modal & toasts */
+.modal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+@media(min-width:700px){.modal{align-items:center}}
+.modal-card{background:var(--panel);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:520px;max-height:88vh;overflow:auto;padding:16px 16px calc(16px + var(--sab))}
+@media(min-width:700px){.modal-card{border-radius:18px}}
+.modal-card h3{margin:0 0 12px}
+.modal-card p{color:var(--muted);font-size:13px}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer}
+.opt input{width:auto;margin-top:3px}
+.opt.on{border-color:var(--acc)}
+.check{display:flex;gap:10px;align-items:center;margin:10px 0;font-size:14px}
+.check input{width:20px;height:20px}
+textarea{width:100%;min-height:90px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:12px/1.3 ui-monospace,monospace}
+#toasts{position:fixed;left:0;right:0;bottom:calc(72px + var(--sab));z-index:60;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;padding:0 12px}
+.toast{background:#1d2733;border:1px solid var(--line);border-radius:12px;padding:10px 14px;max-width:460px;width:100%;box-shadow:0 6px 24px rgba(0,0,0,.4);font-size:13px;animation:tin .2s ease}
+.toast.ok{border-color:rgba(33,192,122,.6)} .toast.err{border-color:rgba(240,82,90,.6)}
+@keyframes tin{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:1px}
+.dot.on{background:var(--up);box-shadow:0 0 6px var(--up)}
+.journal{max-height:520px;overflow:auto}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">MOEX<span>·</span>Paper</div>
+  <div class="hdr-eq"><b id="hEq" class="num">—</b><span id="hPnl" class="small num muted">—</span></div>
+  <span id="srcBadge" class="badge">−15 мин</span>
+  <button id="btnSettings" class="icon-btn" aria-label="Настройки">⚙︎</button>
+</header>
+
+<main>
+  <div id="banners" class="banners"></div>
+
+  <!-- РЫНОК -->
+  <section id="v-market" class="view active">
+    <div class="card">
+      <div class="card-title"><span>Голубые фишки · индекс MOEXBC</span><span id="mktStatus" class="small muted"></span></div>
+      <div id="mktList" class="list"><div class="empty">Загружаю котировки…</div></div>
+    </div>
+    <p class="small muted" style="padding:0 4px">Нажми на бумагу, чтобы открыть график и заявку.</p>
+  </section>
+
+  <!-- ТОРГОВЛЯ -->
+  <section id="v-trade" class="view">
+    <div class="card">
+      <div class="t-head">
+        <select id="tSec" aria-label="Бумага"></select>
+        <div><span id="tLast" class="t-last num">—</span> <span id="tChg" class="num"></span></div>
+        <div id="tStatus" class="small"></div>
+        <div id="tStats" class="t-stats small muted"></div>
+      </div>
+    </div>
+    <div class="t-grid">
+      <div class="t-col">
+        <div class="card c-chart">
+          <div class="intervals" id="ivBar">
+            <button data-iv="1" class="active">1м</button><button data-iv="10">10м</button><button data-iv="60">1ч</button><button data-iv="24">1Д</button>
+            <span id="chartNote" class="small muted" style="margin-left:auto;align-self:center"></span>
+          </div>
+          <div id="chart" class="chart"></div>
+        </div>
+        <div class="card book c-book">
+          <div class="card-title"><span>Стакан</span><span id="bookNote" class="small muted"></span></div>
+          <div id="book"></div>
+        </div>
+      </div>
+      <div class="t-col">
+        <div class="card order c-order">
+          <div class="seg side"><button data-side="buy" class="buy active">Купить</button><button data-side="sell" class="sell">Продать</button></div>
+          <div class="seg otype"><button data-ot="market" class="active">Рыночная</button><button data-ot="limit">Лимитная</button><button data-ot="stop">Стоп</button></div>
+          <label class="f hidden" id="lblPrice">Цена заявки, ₽<input id="oPrice" type="number" inputmode="decimal" step="any"></label>
+          <label class="f hidden" id="lblTrig">Цена активации, ₽<input id="oTrig" type="number" inputmode="decimal" step="any"></label>
+          <div id="stopHint" class="small muted hidden" style="margin:-4px 0 10px">Когда цена дойдёт до уровня активации, выставится рыночная заявка. Ниже текущей цены — стоп-лосс для продажи, выше — тейк-профит (или стоп для шорта при покупке).</div>
+          <label class="f">Количество, лотов
+            <div class="qty"><button id="qMinus" type="button">−</button><input id="oLots" type="number" inputmode="numeric" min="1" step="1" value="1"><button id="qPlus" type="button">+</button></div>
+          </label>
+          <div class="pct"><button data-pct="25">25%</button><button data-pct="50">50%</button><button data-pct="75">75%</button><button data-pct="100">100%</button></div>
+          <div id="oInfo" class="o-info"></div>
+          <button id="oSubmit" class="submit buy">Купить</button>
+        </div>
+        <div class="card c-pos"><div class="card-title">Позиция</div><div id="tPos"></div></div>
+        <div class="card c-ords"><div class="card-title">Активные заявки по бумаге</div><div id="tOrders"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ПОРТФЕЛЬ -->
+  <section id="v-portfolio" class="view">
+    <div class="card">
+      <div class="card-title"><span>Счёт</span><span id="accSince" class="small muted"></span></div>
+      <div id="accKv" class="kv"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>Позиции</span><button id="btnCloseAll" class="btn red small">Закрыть всё</button></div>
+      <div id="posList"></div>
+    </div>
+  </section>
+
+  <!-- ЗАЯВКИ -->
+  <section id="v-orders" class="view">
+    <div class="card">
+      <div class="tabs2" id="ordTabs"><button data-t="active" class="active">Активные</button><button data-t="hist">История</button></div>
+      <div id="ordList"></div>
+    </div>
+  </section>
+
+  <!-- ОТЧЁТ -->
+  <section id="v-report" class="view">
+    <div class="card">
+      <div class="card-title"><span>Итоги торгов</span><span id="repPeriod" class="small muted"></span></div>
+      <div id="repKv" class="kv"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Стоимость счёта</div>
+      <div id="eqChart" class="eq-chart"></div>
+      <div id="eqEmpty" class="empty hidden">График появится после первых минут торгов.</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>Журнал сделок</span>
+        <span class="btn-row"><button id="btnCsv" class="btn">Скачать CSV</button><button id="btnCopyCsv" class="btn">Копировать</button></span>
+      </div>
+      <div id="journal" class="journal"></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button data-view="market" class="active"><span class="ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span>Рынок</button>
+  <button data-view="trade"><span class="ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span>Торговля</button>
+  <button data-view="portfolio"><span class="ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5V12h8.5"/></svg></span>Портфель</button>
+  <button data-view="orders"><span class="ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8.5h6M9 12h6M9 15.5h4"/></svg></span>Заявки</button>
+  <button data-view="report"><span class="ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg></span>Отчёт</button>
+</nav>
+
+<div id="modal" class="modal hidden"><div class="modal-card" id="modalCard"></div></div>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+/* =========================================================
+   MOEX Paper — учебный терминал (paper trading)
+   Данные: ISS Мосбиржи (бесплатно, задержка 15 мин)
+           + опционально T-Invest API (реальное время, по токену)
+   Состояние счёта хранится в localStorage этого браузера.
+   ========================================================= */
+const START_CASH = 400000;
+const LS_KEY = 'moexPaper.v1';
+const ISS = 'https://iss.moex.com/iss';
+const TI_BASES = ['https://invest-public-api.tbank.ru/rest', 'https://invest-public-api.tinkoff.ru/rest'];
+const FALLBACK = ['SBER','LKOH','GAZP','T','YDEX','NVTK','ROSN','TATN','X5','PLZL','GMKN','SNGSP','CHMF','NLMK','MOEX'];
+const MSK = 3 * 3600;           // секунды, Москва UTC+3
+const PLAN_DAYS = 14;
+
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- состояние ---------------- */
+function defState() {
+  return {
+    v: 1, createdAt: Date.now(), startCash: START_CASH, cash: START_CASH,
+    positions: {}, orders: [], trades: [], equity: [], seq: 1, oseq: 1,
+    settings: { source: 'iss', token: '', feePct: 0.05, leverage: 1, allowShort: true, offSession: false },
+    tmap: {}
+  };
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const s = JSON.parse(raw), d = defState();
+      s.settings = Object.assign(d.settings, s.settings || {});
+      return Object.assign(d, s);
+    }
+  } catch (e) { console.warn(e); }
+  return defState();
+}
+let S = loadState();
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) { console.warn('save', e); } }
+
+const R = {
+  universe: FALLBACK.slice(), weights: {}, meta: {}, quotes: {}, status: {},
+  sel: null, iv: 1, side: 'buy', ot: 'market', ordTab: 'active',
+  book: null, tiActive: false, tiBase: null, issOk: null, issErr: null, tiErr: null, lastIss: 0,
+  chart: null, cs: null, vs: null, candles: [], lines: [], eqChart: null, eqSeries: null,
+  view: 'market', loadingChart: false, msgs: {}
+};
+
+/* ---------------- форматирование ---------------- */
+const NF = {};
+function nf(d, mx) { mx = mx == null ? d : mx; const k = d + ':' + mx; return NF[k] || (NF[k] = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: mx })); }
+const money = n => (n == null || !isFinite(n)) ? '—' : nf(2).format(n) + ' ₽';
+const smoney = n => (n == null || !isFinite(n)) ? '—' : (n > 0 ? '+' : '') + nf(2).format(n) + ' ₽';
+const pct = x => (x == null || !isFinite(x)) ? '—' : (x > 0 ? '+' : '') + nf(2).format(x * 100) + '%';
+const cls = n => n > 0 ? 'up' : n < 0 ? 'dn' : '';
+function dec(id) { const d = R.meta[id]?.dec; return d == null ? 2 : d; }
+function px(n, id, extra = 0) { return (n == null || !isFinite(n)) ? '—' : nf(dec(id), Math.min(dec(id) + extra, 8)).format(n); }
+function fmtTime(ms, withSec) {
+  return new Date(ms).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', ...(withSec ? { second: '2-digit' } : {}) });
+}
+function mskDate(ms) { return new Date(ms + MSK * 1000).toISOString().slice(0, 10); }
+function mskToEpoch(s) { return Date.parse(String(s).replace(' ', 'T') + '+03:00') / 1000; }
+const lotOf = id => R.meta[id]?.lot || 1;
+const nameOf = id => R.meta[id]?.name || id;
+
+/* ---------------- сеть: ISS ---------------- */
+async function getJSON(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function rows(block) {
+  if (!block || !block.columns) return [];
+  const c = block.columns;
+  return block.data.map(d => { const o = {}; c.forEach((k, i) => o[k] = d[i]); return o; });
+}
+async function loadUniverse() {
+  try {
+    const j = await getJSON(`${ISS}/statistics/engines/stock/markets/index/analytics/MOEXBC.json?iss.meta=off&limit=100`);
+    const rs = rows(j.analytics);
+    const list = rs.map(r => r.secids || r.ticker).filter(Boolean);
+    if (list.length >= 5) {
+      R.weights = Object.fromEntries(rs.map(r => [r.secids || r.ticker, Number(r.weight) || 0]));
+      R.universe = [...new Set(list)].sort((a, b) => (R.weights[b] || 0) - (R.weights[a] || 0));
+    }
+  } catch (e) { console.warn('MOEXBC состав: беру запасной список', e); }
+  for (const s of Object.keys(S.positions)) if (!R.universe.includes(s)) R.universe.push(s);
+  for (const o of S.orders) if (o.status === 'active' && !R.universe.includes(o.secid)) R.universe.push(o.secid);
+}
+function issTimeToEpoch(t) {
+  if (!t) return null;
+  const e = mskToEpoch(mskDate(Date.now()) + ' ' + t);
+  return e > Date.now() / 1000 + 120 ? e - 86400 : e;
+}
+async function issQuotes() {
+  const url = `${ISS}/engines/stock/markets/shares/boards/TQBR/securities.json?securities=${R.universe.join(',')}&iss.meta=off&iss.only=securities,marketdata`;
+  try {
+    const j = await getJSON(url);
+    for (const s of rows(j.securities)) {
+      R.meta[s.SECID] = {
+        name: s.SHORTNAME || s.SECNAME || s.SECID, lot: Number(s.LOTSIZE) || 1, step: Number(s.MINSTEP) || 0.01,
+        dec: s.DECIMALS != null ? Number(s.DECIMALS) : 2, prev: s.PREVPRICE ?? s.PREVLEGALCLOSEPRICE ?? null
+      };
+    }
+    for (const m of rows(j.marketdata)) {
+      const id = m.SECID, meta = R.meta[id] || {};
+      const q = R.quotes[id] || (R.quotes[id] = {});
+      q.prev = meta.prev; q.open = m.OPEN; q.high = m.HIGH; q.low = m.LOW;
+      q.valToday = m.VALTODAY; q.volToday = m.VOLTODAY; q.issStatus = m.TRADINGSTATUS; q.updTime = m.UPDATETIME;
+      q.issLast = m.LAST ?? m.LCURRENTPRICE ?? m.MARKETPRICE ?? null;
+      q.issBid = m.BID || null; q.issAsk = m.OFFER || null;
+      if (!(R.tiActive && q.tiLast)) {
+        const prevLast = q.last;
+        q.last = q.issLast ?? meta.prev ?? null; q.bid = q.issBid; q.ask = q.issAsk;
+        q.t = issTimeToEpoch(m.UPDATETIME); q.src = 'iss';
+        if (id === R.sel && q.last && q.last !== prevLast) liveCandle(q.last, q.t);
+      }
+    }
+    R.issOk = true; R.issErr = null; R.lastIss = Date.now();
+  } catch (e) {
+    R.issOk = false; R.issErr = e.message || String(e);
+  }
+}
+const cv = r => ({ t: mskToEpoch(r.begin), o: r.open, h: r.high, l: r.low, c: r.close, v: r.volume });
+async function issCandlesRange(id, iv, fromSec) {
+  const base = `${ISS}/engines/stock/markets/shares/boards/TQBR/securities/${id}/candles.json?iss.meta=off&interval=${iv}&from=${mskDate(fromSec * 1000)}`;
+  let out = [], start = 0;
+  for (let i = 0; i < 40; i++) {
+    const rs = rows((await getJSON(base + '&start=' + start)).candles);
+    if (!rs.length) break;
+    out = out.concat(rs); start += rs.length;
+    if (rs.length < 100) break;
+  }
+  return out.map(cv).filter(c => c.t >= fromSec - iv * 60);
+}
+async function issCandlesLatest(id, iv) {
+  const days = { 1: 4, 10: 25, 60: 90, 24: 1000 }[iv];
+  const fromMs = Date.now() - days * 864e5;
+  const base = `${ISS}/engines/stock/markets/shares/boards/TQBR/securities/${id}/candles.json?iss.meta=off&interval=${iv}&from=${mskDate(fromMs)}`;
+  const rs = rows((await getJSON(base + '&iss.reverse=true')).candles);
+  if (rs.length >= 2 && rs[0].begin > rs[rs.length - 1].begin) return rs.reverse().map(cv);
+  if (rs.length < 450) return rs.map(cv);
+  const all = await issCandlesRange(id, iv, Math.floor(Date.now() / 1000) - Math.min(days, iv === 1 ? 2 : days) * 86400);
+  return all.slice(-1500);
+}
+
+/* ---------------- сеть: T-Invest (по токену) ---------------- */
+const qv = x => x == null ? null : (typeof x === 'object' ? Number(x.units || 0) + Number(x.nano || 0) / 1e9 : Number(x));
+async function ti(method, body, service = 'MarketDataService') {
+  const bases = R.tiBase ? [R.tiBase] : TI_BASES;
+  let lastErr;
+  for (const b of bases) {
+    let r;
+    try {
+      r = await fetch(`${b}/tinkoff.public.invest.api.contract.v1.${service}/${method}`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + S.settings.token.trim(), 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(body || {})
+      });
+    } catch (e) { lastErr = new Error('браузер не смог обратиться к API (сеть или CORS)'); continue; }
+    if (r.status === 401 || r.status === 403) throw new Error('токен не принят (' + r.status + ')');
+    if (!r.ok) { let t = ''; try { t = (await r.json()).message || ''; } catch (e) {} lastErr = new Error('HTTP ' + r.status + ' ' + t); continue; }
+    R.tiBase = b;
+    return r.json();
+  }
+  throw lastErr;
+}
+function uidMap() { const m = {}; for (const s of R.universe) { const t = S.tmap[s]; if (t) { m[t.uid] = s; m[t.figi] = s; } } return m; }
+async function tiResolve() {
+  const need = R.universe.filter(s => !S.tmap[s]);
+  await Promise.all(need.map(async id => {
+    try {
+      const j = await ti('GetInstrumentBy', { idType: 'INSTRUMENT_ID_TYPE_TICKER', classCode: 'TQBR', id }, 'InstrumentsService');
+      if (j.instrument) S.tmap[id] = { uid: j.instrument.uid, figi: j.instrument.figi };
+    } catch (e) { if (/токен/.test(e.message)) throw e; }
+  }));
+  save();
+  if (!R.universe.some(s => S.tmap[s])) throw new Error('не удалось найти бумаги в T-Invest API');
+}
+async function tiPrices() {
+  const ids = R.universe.map(s => S.tmap[s]?.uid).filter(Boolean);
+  const j = await ti('GetLastPrices', { instrumentId: ids });
+  const m = uidMap();
+  for (const lp of (j.lastPrices || [])) {
+    const id = m[lp.instrumentUid] || m[lp.figi]; if (!id) continue;
+    const q = R.quotes[id] || (R.quotes[id] = {});
+    const p = qv(lp.price); if (!p) continue;
+    q.tiLast = p; q.last = p; q.t = lp.time ? Date.parse(lp.time) / 1000 : Date.now() / 1000; q.src = 'ti';
+    if (id !== R.sel || !R.book) { q.bid = null; q.ask = null; }
+    if (id === R.sel) liveCandle(p, q.t);
+  }
+}
+async function tiStatuses() {
+  const ids = R.universe.map(s => S.tmap[s]?.uid).filter(Boolean);
+  const j = await ti('GetTradingStatuses', { instrumentId: ids });
+  const m = uidMap();
+  for (const st of (j.tradingStatuses || [])) {
+    const id = m[st.instrumentUid] || m[st.figi]; if (!id) continue;
+    R.status[id] = !!st.marketOrderAvailableFlag || st.tradingStatus === 'SECURITY_TRADING_STATUS_NORMAL_TRADING';
+  }
+}
+async function tiBook(id, depth = 20) {
+  const t = S.tmap[id]; if (!t) return null;
+  const j = await ti('GetOrderBook', { instrumentId: t.uid, depth });
+  const map = a => (a || []).map(o => ({ p: qv(o.price), q: Number(o.quantity) })).filter(o => o.p > 0);
+  return { bids: map(j.bids), asks: map(j.asks), t: Date.now() };
+}
+const TI_IV = { 1: 'CANDLE_INTERVAL_1_MIN', 10: 'CANDLE_INTERVAL_10_MIN', 60: 'CANDLE_INTERVAL_HOUR', 24: 'CANDLE_INTERVAL_DAY' };
+const TI_SPAN = { 1: 86400, 10: 86400, 60: 7 * 86400, 24: 365 * 86400 };
+async function tiCandles(id, iv, fromSec) {
+  const t = S.tmap[id]; if (!t) return [];
+  const to = Math.floor(Date.now() / 1000) + 60;
+  const from = Math.max(fromSec, to - TI_SPAN[iv] + 120);
+  const j = await ti('GetCandles', { instrumentId: t.uid, from: new Date(from * 1000).toISOString(), to: new Date(to * 1000).toISOString(), interval: TI_IV[iv] });
+  return (j.candles || []).map(c => ({ t: Date.parse(c.time) / 1000, o: qv(c.open), h: qv(c.high), l: qv(c.low), c: qv(c.close), v: Number(c.volume) }));
+}
+
+/* ---------------- свечи ---------------- */
+function bucket(t, iv) { return iv === 24 ? Math.floor((t + MSK) / 86400) * 86400 - MSK : Math.floor(t / (iv * 60)) * iv * 60; }
+function mergeCandles(a, b, iv) {
+  const m = new Map();
+  for (const c of a.concat(b)) { if (!(c.o > 0)) continue; const k = bucket(c.t, iv); m.set(k, { ...c, t: k }); }
+  return [...m.values()].sort((x, y) => x.t - y.t);
+}
+async function getCandles(id, iv) {
+  let iss = [];
+  try { iss = await issCandlesLatest(id, iv); } catch (e) { console.warn('iss candles', e); }
+  let tic = [];
+  if (R.tiActive) { try { tic = await tiCandles(id, iv, Math.floor(Date.now() / 1000) - TI_SPAN[iv]); } catch (e) { console.warn('ti candles', e); } }
+  return mergeCandles(iss, tic, iv);
+}
+async function candlesSince(id, fromSec) {
+  let iss = [];
+  try { iss = await issCandlesRange(id, 1, fromSec); } catch (e) { console.warn(e); }
+  let tic = [];
+  if (R.tiActive) { try { tic = await tiCandles(id, 1, fromSec); } catch (e) {} }
+  return mergeCandles(iss, tic, 1).filter(c => c.t >= fromSec);
+}
+
+/* ---------------- счёт и исполнение ---------------- */
+function quote(id) { return R.quotes[id] || {}; }
+function mark(id) { const q = quote(id); return q.last || q.prev || S.positions[id]?.avg || 0; }
+function feeOf(value) { return Math.round(Math.abs(value) * S.settings.feePct) / 100; }
+function account() {
+  let posVal = 0, gross = 0, unreal = 0;
+  for (const [id, p] of Object.entries(S.positions)) {
+    if (!p.qty) continue;
+    const m = mark(id);
+    posVal += p.qty * m; gross += Math.abs(p.qty * m); unreal += p.qty * (m - p.avg);
+  }
+  const equity = S.cash + posVal, margin = gross / S.settings.leverage;
+  return { equity, posVal, gross, margin, free: equity - margin, unreal, pnl: equity - S.startCash };
+}
+function isOpen(id) {
+  if (S.settings.offSession) return true;
+  if (R.tiActive && R.status[id] != null) return R.status[id];
+  const st = quote(id).issStatus;
+  if (st) return st === 'T';
+  // запасной вариант — расписание (МСК)
+  const d = new Date(Date.now() + MSK * 1000), wd = d.getUTCDay(), mins = d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (wd === 0 || wd === 6) return mins >= 600 && mins < 1140;
+  return (mins >= 410 && mins < 1120) || (mins >= 1145 && mins < 1430);
+}
+function checkTrade(id, side, qty, price) {
+  const p = S.positions[id] || { qty: 0, avg: 0 };
+  const dq = side === 'buy' ? qty : -qty, nq = p.qty + dq;
+  if (nq < 0 && !S.settings.allowShort) return 'Шорт отключён в настройках';
+  const reducing = Math.abs(nq) <= Math.abs(p.qty) && (nq === 0 || Math.sign(nq) === Math.sign(p.qty));
+  if (reducing) return null;
+  const a = account(), m = mark(id) || price;
+  const cashAfter = S.cash - dq * price - feeOf(qty * price);
+  const posValAfter = a.posVal - p.qty * m + nq * m;
+  const grossAfter = a.gross - Math.abs(p.qty * m) + Math.abs(nq * m);
+  const free = cashAfter + posValAfter - grossAfter / S.settings.leverage;
+  if (free < -0.005) return 'Недостаточно средств: не хватает ' + money(-free);
+  return null;
+}
+function maxLots(id, side, price) {
+  if (!price) return 0;
+  const lot = lotOf(id);
+  let lo = 0, hi = Math.ceil((Math.max(account().equity, 0) * S.settings.leverage * 2.2) / (price * lot)) + Math.abs((S.positions[id]?.qty || 0) / lot) + 1;
+  while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (!checkTrade(id, side, mid * lot, price)) lo = mid; else hi = mid - 1; }
+  return lo;
+}
+function fill(id, side, qty, price, kind, orderId, timeMs) {
+  const p = S.positions[id] || (S.positions[id] = { qty: 0, avg: 0 });
+  const dq = side === 'buy' ? qty : -qty, fee = feeOf(qty * price);
+  let realized = 0;
+  if (p.qty !== 0 && Math.sign(dq) !== Math.sign(p.qty)) {
+    const closing = Math.min(Math.abs(dq), Math.abs(p.qty));
+    realized = closing * (price - p.avg) * Math.sign(p.qty);
+  }
+  const nq = p.qty + dq;
+  if (nq === 0) p.avg = 0;
+  else if (p.qty === 0 || Math.sign(nq) !== Math.sign(p.qty)) p.avg = price;
+  else if (Math.abs(nq) > Math.abs(p.qty)) p.avg = (Math.abs(p.qty) * p.avg + Math.abs(dq) * price) / Math.abs(nq);
+  p.qty = nq;
+  S.cash = Math.round((S.cash - dq * price - fee) * 100) / 100;
+  if (nq === 0) delete S.positions[id];
+  const tr = { id: S.seq++, time: timeMs || Date.now(), secid: id, side, qty, lots: qty / lotOf(id), price, value: qty * price, fee, realized, kind, orderId };
+  S.trades.push(tr);
+  snapEquity(true);
+  save();
+  const verb = side === 'buy' ? 'Куплено' : 'Продано';
+  toast(`${verb}: ${id} ${tr.lots} лот × ${px(price, id, 2)} ₽` + (realized ? ` · результат ${smoney(realized - fee)}` : ''), 'ok');
+  return tr;
+}
+function vwap(levels, lots) {
+  if (!levels || !levels.length) return null;
+  let rem = lots, cost = 0;
+  for (const l of levels) { const take = Math.min(rem, l.q); cost += take * l.p; rem -= take; if (rem <= 0) break; }
+  if (rem > 0) cost += rem * levels[levels.length - 1].p;
+  return cost / lots;
+}
+async function marketPrice(id, side, lots) {
+  if (R.tiActive) {
+    try { const b = await tiBook(id, 20); if (id === R.sel) R.book = b; const p = vwap(side === 'buy' ? b.asks : b.bids, lots); if (p) return p; } catch (e) {}
+  }
+  const q = quote(id);
+  return side === 'buy' ? (q.ask || q.last) : (q.bid || q.last);
+}
+function newOrder(o) {
+  const ord = Object.assign({ id: S.oseq++, createdAt: Date.now(), status: 'active' }, o);
+  S.orders.push(ord); save();
+  return ord;
+}
+async function execMarket(id, side, lots, kind = 'market', ord = null) {
+  if (!isOpen(id)) return { err: 'Сейчас нет торгов по бумаге — рыночная заявка не исполнится. Можно выставить лимитную.' };
+  const price = await marketPrice(id, side, lots);
+  if (!price) return { err: 'Нет цены по бумаге' };
+  const err = checkTrade(id, side, lots * lotOf(id), price);
+  if (err) return { err };
+  return { trade: fill(id, side, lots * lotOf(id), Math.round(price * 1e6) / 1e6, kind, ord?.id) };
+}
+
+async function submitOrder() {
+  const id = R.sel, side = R.side, ot = R.ot;
+  const lots = parseInt($('#oLots').value, 10);
+  if (!id || !R.meta[id]) return toast('Нет данных по бумаге', 'err');
+  if (!(lots > 0)) return toast('Укажи количество лотов', 'err');
+  const btn = $('#oSubmit'); btn.disabled = true;
+  try {
+    if (ot === 'market') {
+      const ord = newOrder({ secid: id, side, type: 'market', lots });
+      const r = await execMarket(id, side, lots, 'market', ord);
+      if (r.err) { ord.status = 'rejected'; ord.reason = r.err; toast(r.err, 'err'); }
+      else { ord.status = 'filled'; ord.filledAt = Date.now(); ord.fillPrice = r.trade.price; }
+      save();
+    } else if (ot === 'limit') {
+      let price = parseFloat(String($('#oPrice').value).replace(',', '.'));
+      if (!(price > 0)) return toast('Укажи цену заявки', 'err');
+      price = roundStep(price, id);
+      const err = checkTrade(id, side, lots * lotOf(id), price);
+      if (err) { newOrder({ secid: id, side, type: 'limit', lots, price, status: 'rejected', reason: err }); return toast(err, 'err'); }
+      const ord = newOrder({ secid: id, side, type: 'limit', lots, price, from: Math.ceil(Date.now() / 60000) * 60 });
+      toast(`Лимитная заявка выставлена: ${side === 'buy' ? 'покупка' : 'продажа'} ${id} ${lots} лот по ${px(price, id)}`, 'ok');
+      await tryLive(ord, true);
+    } else {
+      let trig = parseFloat(String($('#oTrig').value).replace(',', '.'));
+      if (!(trig > 0)) return toast('Укажи цену активации', 'err');
+      trig = roundStep(trig, id);
+      const m = mark(id);
+      const ord = newOrder({ secid: id, side, type: 'stop', lots, trig, cond: trig >= m ? 'gte' : 'lte', from: Math.ceil(Date.now() / 60000) * 60 });
+      toast(`Стоп-заявка выставлена: ${side === 'buy' ? 'покупка' : 'продажа'} ${id} при цене ${ord.cond === 'gte' ? '≥' : '≤'} ${px(trig, id)}`, 'ok');
+    }
+  } finally { btn.disabled = false; renderAll(); }
+}
+function roundStep(p, id) {
+  const st = R.meta[id]?.step || 0.01;
+  return Math.round(Math.round(p / st) * st * 1e8) / 1e8;
+}
+async function tryLive(o, onPlace) {
+  if (o.status !== 'active' || o.busy || !isOpen(o.secid)) return;
+  const q = quote(o.secid); if (!q.last) return;
+  const lot = lotOf(o.secid);
+  o.busy = true;
+  try {
+    if (o.type === 'limit') {
+      const pb = o.side === 'buy' ? (q.ask || q.last) : (q.bid || q.last);
+      const hit = o.side === 'buy' ? pb <= o.price : pb >= o.price;
+      if (!hit) return;
+      const price = onPlace ? (o.side === 'buy' ? Math.min(o.price, pb) : Math.max(o.price, pb)) : o.price;
+      const err = checkTrade(o.secid, o.side, o.lots * lot, price);
+      if (err) { o.status = 'rejected'; o.reason = err; toast(`Заявка №${o.id} отклонена: ${err}`, 'err'); save(); return; }
+      const tr = fill(o.secid, o.side, o.lots * lot, price, 'limit', o.id);
+      o.status = 'filled'; o.filledAt = tr.time; o.fillPrice = price; save();
+    } else if (o.type === 'stop') {
+      const hit = o.cond === 'gte' ? q.last >= o.trig : q.last <= o.trig;
+      if (!hit) return;
+      const r = await execMarket(o.secid, o.side, o.lots, 'stop', o);
+      if (r.err) { o.status = 'rejected'; o.reason = r.err; toast(`Стоп-заявка №${o.id}: ${r.err}`, 'err'); }
+      else { o.status = 'filled'; o.filledAt = r.trade.time; o.fillPrice = r.trade.price; }
+      save();
+    }
+  } finally { o.busy = false; }
+}
+async function processOrders() {
+  for (const o of S.orders.filter(o => o.status === 'active')) await tryLive(o, false);
+}
+// Догоняем заявки, пока страница была закрыта: смотрим минутные свечи с момента выставления
+function hitOnCandle(o, c) {
+  if (o.type === 'limit') {
+    if (o.side === 'buy' && c.l <= o.price) return Math.min(o.price, c.o);
+    if (o.side === 'sell' && c.h >= o.price) return Math.max(o.price, c.o);
+  } else if (o.type === 'stop') {
+    if (o.cond === 'lte' && c.l <= o.trig) return Math.min(o.trig, c.o);
+    if (o.cond === 'gte' && c.h >= o.trig) return Math.max(o.trig, c.o);
+  }
+  return null;
+}
+let catchingUp = false;
+async function catchUp() {
+  if (catchingUp) return;
+  const act = S.orders.filter(o => o.status === 'active' && (o.type === 'limit' || o.type === 'stop'));
+  if (!act.length) return;
+  catchingUp = true;
+  try {
+    const ids = [...new Set(act.map(o => o.secid))];
+    for (const id of ids) {
+      const mine = act.filter(o => o.secid === id);
+      const from = Math.min(...mine.map(o => o.checkedUntil || o.from || Math.ceil(o.createdAt / 60000) * 60));
+      if (Date.now() / 1000 - from < 90) continue;
+      const cs = await candlesSince(id, from);
+      if (!cs.length) continue;
+      const lot = lotOf(id);
+      for (const c of cs) {
+        for (const o of mine) {
+          if (o.status !== 'active') continue;
+          const start = o.checkedUntil || o.from || Math.ceil(o.createdAt / 60000) * 60;
+          if (c.t < start) continue;
+          const p = hitOnCandle(o, c);
+          if (p == null) continue;
+          const err = checkTrade(id, o.side, o.lots * lot, p);
+          if (err) { o.status = 'rejected'; o.reason = err; continue; }
+          const tr = fill(id, o.side, o.lots * lot, p, o.type, o.id, (c.t + 30) * 1000);
+          o.status = 'filled'; o.filledAt = tr.time; o.fillPrice = p;
+        }
+      }
+      const last = cs[cs.length - 1].t + 60;
+      for (const o of mine) if (o.status === 'active') o.checkedUntil = last;
+      save();
+    }
+  } catch (e) { console.warn('catchUp', e); }
+  finally { catchingUp = false; }
+}
+function snapEquity(force) {
+  if (!R.lastIss && !R.tiActive) return;
+  const now = Date.now(), last = S.equity[S.equity.length - 1];
+  if (!force && last && now - last.t < 5 * 60 * 1000) return;
+  S.equity.push({ t: now, v: Math.round(account().equity * 100) / 100 });
+  if (S.equity.length > 5000) S.equity.splice(0, S.equity.length - 5000);
+  save();
+}
+
+/* ---------------- график ---------------- */
+function ensureChart() {
+  if (R.chart || !window.LightweightCharts) return;
+  const el = $('#chart');
+  R.chart = LightweightCharts.createChart(el, {
+    autoSize: true,
+    layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#8b98a5', fontSize: 11 },
+    grid: { vertLines: { color: 'rgba(34,48,65,.5)' }, horzLines: { color: 'rgba(34,48,65,.5)' } },
+    rightPriceScale: { borderColor: '#223041' },
+    timeScale: { borderColor: '#223041', timeVisible: true, secondsVisible: false, rightOffset: 4 },
+    crosshair: { mode: 0 }
+  });
+  R.cs = R.chart.addCandlestickSeries({ upColor: '#21c07a', downColor: '#f0525a', borderVisible: false, wickUpColor: '#21c07a', wickDownColor: '#f0525a' });
+  R.cs.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.24 } });
+  R.vs = R.chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'vol', color: 'rgba(59,139,246,.35)', lastValueVisible: false, priceLineVisible: false });
+  R.chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+}
+const toBar = c => ({ time: c.t + MSK, open: c.o, high: c.h, low: c.l, close: c.c });
+const toVol = c => ({ time: c.t + MSK, value: c.v || 0, color: c.c >= c.o ? 'rgba(33,192,122,.35)' : 'rgba(240,82,90,.35)' });
+let chartReq = 0;
+async function loadChart() {
+  ensureChart();
+  if (!R.chart || !R.sel) return;
+  const my = ++chartReq, id = R.sel, iv = R.iv;
+  $('#chartNote').textContent = 'загрузка…';
+  const st = R.meta[id]?.step || 0.01;
+  R.cs.applyOptions({ priceFormat: { type: 'price', precision: dec(id), minMove: st } });
+  let cs = [];
+  try { cs = await getCandles(id, iv); } catch (e) { console.warn(e); }
+  if (my !== chartReq) return;
+  R.candles = cs;
+  R.cs.setData(cs.map(toBar));
+  R.vs.setData(cs.map(toVol));
+  R.chart.timeScale().fitContent();
+  const show = { 1: 150, 10: 120, 60: 120, 24: 180 }[iv];
+  if (cs.length > show) R.chart.timeScale().setVisibleLogicalRange({ from: cs.length - show, to: cs.length + 3 });
+  $('#chartNote').textContent = cs.length ? (R.tiActive ? 'реальное время' : 'ISS · задержка 15 мин') : 'нет данных';
+  updateLines();
+}
+function liveCandle(price, tSec) {
+  if (!R.cs || !price || !R.candles.length || !tSec) return;
+  if (tSec > Date.now() / 1000 + 90) return;
+  if (!isOpen(R.sel) && !S.settings.offSession) return;
+  const b = bucket(tSec, R.iv);
+  let last = R.candles[R.candles.length - 1];
+  if (b > last.t) { last = { t: b, o: price, h: price, l: price, c: price, v: 0 }; R.candles.push(last); }
+  else if (b === last.t) { last.h = Math.max(last.h, price); last.l = Math.min(last.l, price); last.c = price; }
+  else return;
+  try { R.cs.update(toBar(last)); } catch (e) {}
+}
+function updateLines() {
+  if (!R.cs) return;
+  for (const l of R.lines) { try { R.cs.removePriceLine(l); } catch (e) {} }
+  R.lines = [];
+  const id = R.sel, p = S.positions[id];
+  if (p && p.qty) R.lines.push(R.cs.createPriceLine({ price: p.avg, color: '#3b8bf6', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: (p.qty > 0 ? 'Лонг ' : 'Шорт ') + Math.abs(p.qty / lotOf(id)) }));
+  for (const o of S.orders) {
+    if (o.status !== 'active' || o.secid !== id) continue;
+    const price = o.type === 'limit' ? o.price : o.trig;
+    R.lines.push(R.cs.createPriceLine({ price, color: o.side === 'buy' ? '#21c07a' : '#f0525a', lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: (o.type === 'stop' ? 'Стоп ' : 'Лим ') + (o.side === 'buy' ? 'B ' : 'S ') + o.lots }));
+  }
+}
+
+/* ---------------- отрисовка ---------------- */
+function setMsg(key, html, kind) { if (html) R.msgs[key] = { html, kind }; else delete R.msgs[key]; }
+function renderBanners() {
+  const a = account();
+  if (a.margin > 0 && a.equity < a.margin * 0.5) setMsg('mc', `<b>Маржин-колл:</b> стоимость счёта ${money(a.equity)} ниже половины требуемого обеспечения (${money(a.margin)}). В реальном терминале брокер начал бы принудительно закрывать позиции.`, 'err');
+  else setMsg('mc');
+  if (R.issOk === false) setMsg('iss', `Нет связи с биржей (ISS): ${esc(R.issErr)}. Показываю последние полученные цены.`, 'err'); else setMsg('iss');
+  $('#banners').innerHTML = Object.values(R.msgs).map(m => `<div class="b-${m.kind}">${m.html}</div>`).join('');
+}
+function renderHeader() {
+  const a = account();
+  $('#hEq').textContent = money(a.equity);
+  const h = $('#hPnl'); h.textContent = smoney(a.pnl) + ' · ' + pct(a.pnl / S.startCash); h.className = 'small num ' + (cls(a.pnl) || 'muted');
+  const b = $('#srcBadge');
+  if (R.tiActive) { b.textContent = 'онлайн'; b.className = 'badge rt'; b.title = 'Т-Инвестиции, реальное время'; }
+  else { b.textContent = '−15 мин'; b.className = 'badge'; b.title = 'ISS Мосбиржи, задержка 15 минут'; }
+}
+function renderMarket() {
+  const list = R.universe.filter(id => R.meta[id] || R.quotes[id]);
+  if (!list.length) return;
+  const any = R.quotes[list[0]];
+  const st = $('#mktStatus');
+  if (R.tiActive) st.innerHTML = `<span class="dot on"></span>онлайн`;
+  else st.innerHTML = any?.updTime ? `<span class="dot ${isOpen(list[0]) ? 'on' : ''}"></span>данные на ${esc(any.updTime)} МСК` : '';
+  $('#mktList').innerHTML = list.map(id => {
+    const q = quote(id), chg = q.last && q.prev ? q.last / q.prev - 1 : null, p = S.positions[id];
+    const nOrd = S.orders.filter(o => o.status === 'active' && o.secid === id).length;
+    const chips = (p ? `<span class="chip ${p.qty > 0 ? 'l' : 's'}">${p.qty > 0 ? 'лонг' : 'шорт'}</span>` : '') + (nOrd ? `<span class="chip o">${nOrd} заяв.</span>` : '');
+    const ba = (q.bid || q.ask) ? `<span class="dn">${px(q.ask, id)}</span><br><span class="up">${px(q.bid, id)}</span>` : `лот ${lotOf(id)}`;
+    return `<div class="row" data-sec="${esc(id)}"><div class="c1"><span class="tk">${esc(id)}</span>${chips}<span class="nm">${esc(nameOf(id))}</span></div>
+      <div class="c2"><div class="px num"><b>${px(q.last, id)}</b></div><div class="small num ${cls(chg)}">${pct(chg)}</div></div>
+      <div class="c3 num">${ba}</div></div>`;
+  }).join('');
+}
+function renderTradeHead() {
+  const id = R.sel; if (!id) return;
+  const sel = $('#tSec');
+  const opts = R.universe.filter(s => R.meta[s]).map(s => `<option value="${esc(s)}"${s === id ? ' selected' : ''}>${esc(s)} · ${esc(nameOf(s))}</option>`).join('');
+  if (sel.dataset.sig !== opts.length + id) { sel.innerHTML = opts; sel.dataset.sig = opts.length + id; }
+  const q = quote(id), chg = q.last && q.prev ? q.last / q.prev - 1 : null;
+  $('#tLast').textContent = px(q.last, id);
+  const c = $('#tChg'); c.textContent = q.last && q.prev ? `${q.last - q.prev > 0 ? '+' : ''}${px(q.last - q.prev, id)} (${pct(chg)})` : ''; c.className = 'num ' + cls(chg);
+  const open = isOpen(id);
+  $('#tStatus').innerHTML = `<span class="dot ${open ? 'on' : ''}"></span>${open ? 'Идут торги' : 'Торгов нет'}${S.settings.offSession ? ' <span class="warn">(режим «вне сессии»)</span>' : ''}`;
+  const vol = q.valToday ? nf(1).format(q.valToday / 1e6) + ' млн ₽' : '—';
+  $('#tStats').innerHTML = `<span>Откр ${px(q.open, id)}</span><span>Макс ${px(q.high, id)}</span><span>Мин ${px(q.low, id)}</span><span>Закр. вчера ${px(q.prev, id)}</span><span>Оборот ${vol}</span><span>Лот ${lotOf(id)} шт · шаг ${R.meta[id]?.step ?? '—'}</span>`;
+}
+function renderBook() {
+  const id = R.sel, el = $('#book'), q = quote(id);
+  if (R.tiActive && R.book && R.book.asks.length + R.book.bids.length) {
+    $('#bookNote').textContent = 'онлайн · ' + new Date(R.book.t).toLocaleTimeString('ru-RU');
+    const n = window.innerWidth < 900 ? 6 : 10;
+    const asks = R.book.asks.slice(0, n).reverse(), bids = R.book.bids.slice(0, n);
+    const mx = Math.max(1, ...asks.map(a => a.q), ...bids.map(b => b.q));
+    const row = (o, k) => `<tr class="${k}"><td class="p num">${px(o.p, id)}</td><td class="q num">${nf(0).format(o.q)}<span class="bar" style="width:${Math.round(o.q / mx * 100)}%;background:${k === 'a' ? 'var(--dn)' : 'var(--up)'}"></span></td></tr>`;
+    const spread = asks.length && bids.length ? R.book.asks[0].p - R.book.bids[0].p : null;
+    el.innerHTML = `<table>${asks.map(a => row(a, 'a')).join('')}<tr class="mid"><td colspan="2">спред ${px(spread, id)}</td></tr>${bids.map(b => row(b, 'b')).join('')}</table><div class="small muted" style="margin-top:6px">Объём в лотах. Нажми на цену, чтобы подставить её в лимитную заявку.</div>`;
+  } else {
+    $('#bookNote').textContent = R.tiActive ? '' : 'ISS · задержка 15 мин';
+    el.innerHTML = `<table><tr class="a"><td>Лучшая продажа (Ask)</td><td class="p num" style="text-align:right">${px(q.ask, id)}</td></tr><tr class="b"><td>Лучшая покупка (Bid)</td><td class="p num" style="text-align:right">${px(q.bid, id)}</td></tr></table>
+      <div class="small muted" style="margin-top:6px">Полный стакан в реальном времени доступен в режиме Т-Инвестиций (⚙︎ → источник данных).</div>`;
+  }
+}
+function orderPriceEstimate() {
+  const id = R.sel, q = quote(id);
+  if (R.ot === 'limit') { const v = parseFloat(String($('#oPrice').value).replace(',', '.')); return v > 0 ? v : q.last; }
+  if (R.ot === 'stop') { const v = parseFloat(String($('#oTrig').value).replace(',', '.')); return v > 0 ? v : q.last; }
+  if (R.tiActive && R.book) { const l = R.side === 'buy' ? R.book.asks : R.book.bids; if (l.length) return l[0].p; }
+  return R.side === 'buy' ? (q.ask || q.last) : (q.bid || q.last);
+}
+function renderOrderForm() {
+  const id = R.sel; if (!id) return;
+  const lots = parseInt($('#oLots').value, 10) || 0, lot = lotOf(id), price = orderPriceEstimate();
+  const val = lots * lot * (price || 0), fee = feeOf(val), a = account();
+  const mx = maxLots(id, R.side, price);
+  const p = S.positions[id];
+  const willShort = R.side === 'sell' && (p?.qty || 0) - lots * lot < 0;
+  $('#oInfo').innerHTML = `<span>Цена ${R.ot === 'market' ? '≈' : ''}</span><span class="num">${px(price, id)} ₽</span>
+    <span>В лоте</span><span class="num">${lot} шт</span>
+    <span>Сумма</span><span class="num">${money(val)}</span>
+    <span>Комиссия (${nf(3).format(S.settings.feePct)}%)</span><span class="num">${money(fee)}</span>
+    <span>Свободно</span><span class="num">${money(a.free)}</span>
+    <span>Доступно</span><span class="num">${nf(0).format(mx)} лот</span>
+    ${willShort ? '<span class="warn">Откроется шорт</span><span class="warn">продажа без бумаг</span>' : ''}`;
+  const b = $('#oSubmit');
+  const word = R.side === 'buy' ? 'Купить' : 'Продать';
+  const t = R.ot === 'market' ? '' : R.ot === 'limit' ? ' (лимит)' : ' (стоп)';
+  b.textContent = `${word} ${id} · ${lots || 0} лот${t}`;
+  b.className = 'submit ' + R.side;
+}
+function posRowHtml(id, p, withOpen) {
+  const m = mark(id), lot = lotOf(id), val = p.qty * m, un = p.qty * (m - p.avg), unp = p.avg ? (m / p.avg - 1) * Math.sign(p.qty) : 0;
+  return `<div class="item"><div><div class="t1">${withOpen ? `<a href="#" data-open="${esc(id)}" style="color:inherit">${esc(id)}</a>` : esc(id)} <span class="chip ${p.qty > 0 ? 'l' : 's'}">${p.qty > 0 ? 'лонг' : 'шорт'}</span></div>
+    <div class="sub num">${nf(0).format(Math.abs(p.qty / lot))} лот (${nf(0).format(Math.abs(p.qty))} шт) · ср. ${px(p.avg, id, 2)} → ${px(m, id)}</div>
+    <div class="sub num">Стоимость ${money(val)}</div></div>
+    <div class="r"><div class="num ${cls(un)}"><b>${smoney(un)}</b></div><div class="small num ${cls(un)}">${pct(unp)}</div>
+    <button class="btn small" data-close="${esc(id)}" style="margin-top:6px">Закрыть</button></div></div>`;
+}
+function renderTradeSide() {
+  const id = R.sel, p = S.positions[id];
+  $('#tPos').innerHTML = p && p.qty ? posRowHtml(id, p, false) : '<div class="empty">Позиции нет</div>';
+  const ords = S.orders.filter(o => o.status === 'active' && o.secid === id);
+  $('#tOrders').innerHTML = ords.length ? ords.map(orderHtml).join('') : '<div class="empty">Нет активных заявок</div>';
+}
+const TYPE = { market: 'Рыночная', limit: 'Лимитная', stop: 'Стоп' };
+const STATUS = { active: 'Активна', filled: 'Исполнена', cancelled: 'Снята', rejected: 'Отклонена' };
+function orderHtml(o) {
+  const id = o.secid, side = o.side === 'buy' ? '<span class="up">Покупка</span>' : '<span class="dn">Продажа</span>';
+  const cond = o.type === 'limit' ? `по ${px(o.price, id)}` : o.type === 'stop' ? `при ${o.cond === 'gte' ? '≥' : '≤'} ${px(o.trig, id)}` : '';
+  const right = o.status === 'active' ? `<button class="btn small" data-cancel="${o.id}">Снять</button>`
+    : `<div class="small ${o.status === 'filled' ? 'up' : o.status === 'rejected' ? 'dn' : 'muted'}">${STATUS[o.status]}</div>${o.fillPrice ? `<div class="small num muted">${px(o.fillPrice, id, 2)}</div>` : ''}`;
+  return `<div class="item"><div><div class="t1">${esc(id)} · ${side} ${o.lots} лот</div>
+    <div class="sub">№${o.id} · ${TYPE[o.type]} ${cond} · ${fmtTime(o.createdAt)}</div>${o.reason ? `<div class="sub dn">${esc(o.reason)}</div>` : ''}</div>
+    <div class="r">${right}</div></div>`;
+}
+function renderPortfolio() {
+  const a = account(), realized = S.trades.reduce((s, t) => s + t.realized, 0), fees = S.trades.reduce((s, t) => s + t.fee, 0);
+  $('#accSince').textContent = 'открыт ' + new Date(S.createdAt).toLocaleDateString('ru-RU');
+  const kv = [['Стоимость счёта', money(a.equity)], ['Результат', `<span class="${cls(a.pnl)}">${smoney(a.pnl)} (${pct(a.pnl / S.startCash)})</span>`],
+    ['Свободные деньги', money(S.cash)], ['Доступно для сделок', money(a.free)],
+    ['В позициях', money(a.gross)], ['Нереализ. результат', `<span class="${cls(a.unreal)}">${smoney(a.unreal)}</span>`],
+    ['Зафиксировано', `<span class="${cls(realized)}">${smoney(realized)}</span>`], ['Комиссии', money(fees)]];
+  $('#accKv').innerHTML = kv.map(([k, v]) => `<div><div class="k">${k}</div><div class="v num">${v}</div></div>`).join('');
+  const ps = Object.entries(S.positions).filter(([, p]) => p.qty);
+  $('#posList').innerHTML = ps.length ? ps.map(([id, p]) => posRowHtml(id, p, true)).join('') : '<div class="empty">Позиций нет. Открой «Рынок» и выбери бумагу.</div>';
+  $('#btnCloseAll').classList.toggle('hidden', !ps.length);
+}
+function renderOrders() {
+  $$('#ordTabs button').forEach(b => b.classList.toggle('active', b.dataset.t === R.ordTab));
+  const list = R.ordTab === 'active' ? S.orders.filter(o => o.status === 'active') : S.orders.filter(o => o.status !== 'active').slice().reverse().slice(0, 300);
+  $('#ordList').innerHTML = list.length ? list.map(orderHtml).join('') : `<div class="empty">${R.ordTab === 'active' ? 'Активных заявок нет' : 'История пуста'}</div>`;
+}
+function stats() {
+  const a = account();
+  const closes = S.trades.filter(t => t.realized !== 0);
+  const wins = closes.filter(t => t.realized - t.fee > 0);
+  const realized = S.trades.reduce((s, t) => s + t.realized, 0), fees = S.trades.reduce((s, t) => s + t.fee, 0);
+  let peak = S.startCash, mdd = 0;
+  for (const e of S.equity.concat([{ v: a.equity }])) { peak = Math.max(peak, e.v); mdd = Math.max(mdd, (peak - e.v) / peak); }
+  const best = closes.reduce((m, t) => Math.max(m, t.realized - t.fee), -Infinity);
+  const worst = closes.reduce((m, t) => Math.min(m, t.realized - t.fee), Infinity);
+  const turnover = S.trades.reduce((s, t) => s + t.value, 0);
+  return { a, closes, wins, realized, fees, mdd, best, worst, turnover };
+}
+function renderReport() {
+  const s = stats(), a = s.a;
+  const day = Math.floor((Date.now() - S.createdAt) / 864e5) + 1;
+  $('#repPeriod').textContent = `с ${new Date(S.createdAt).toLocaleDateString('ru-RU')} · день ${day} из ${PLAN_DAYS}`;
+  const kv = [['Начальный капитал', money(S.startCash)], ['Текущая стоимость', money(a.equity)],
+    ['Доходность', `<span class="${cls(a.pnl)}">${pct(a.pnl / S.startCash)}</span>`], ['Результат, ₽', `<span class="${cls(a.pnl)}">${smoney(a.pnl)}</span>`],
+    ['Сделок', nf(0).format(S.trades.length)], ['Доля прибыльных', s.closes.length ? nf(0).format(s.wins.length / s.closes.length * 100) + '% (' + s.wins.length + '/' + s.closes.length + ')' : '—'],
+    ['Макс. просадка', nf(2).format(s.mdd * 100) + '%'], ['Оборот', money(s.turnover)],
+    ['Лучшая сделка', s.closes.length ? `<span class="${cls(s.best)}">${smoney(s.best)}</span>` : '—'], ['Худшая сделка', s.closes.length ? `<span class="${cls(s.worst)}">${smoney(s.worst)}</span>` : '—'],
+    ['Зафиксировано', `<span class="${cls(s.realized)}">${smoney(s.realized)}</span>`], ['Комиссии', money(s.fees)]];
+  $('#repKv').innerHTML = kv.map(([k, v]) => `<div><div class="k">${k}</div><div class="v num">${v}</div></div>`).join('');
+  renderEqChart();
+  const tr = S.trades.slice().reverse();
+  $('#journal').innerHTML = tr.length ? tr.map(t => `<div class="item"><div><div class="t1">${esc(t.secid)} · ${t.side === 'buy' ? '<span class="up">Покупка</span>' : '<span class="dn">Продажа</span>'} ${nf(0).format(t.lots)} лот</div>
+      <div class="sub num">${fmtTime(t.time, true)} · ${px(t.price, t.secid, 2)} ₽ · ${money(t.value)} · ${TYPE[t.kind] || t.kind}</div></div>
+      <div class="r">${t.realized ? `<div class="num ${cls(t.realized - t.fee)}"><b>${smoney(t.realized - t.fee)}</b></div>` : ''}<div class="small muted num">ком. ${money(t.fee)}</div></div></div>`).join('')
+    : '<div class="empty">Сделок пока нет</div>';
+}
+function renderEqChart() {
+  const pts = [{ t: S.createdAt, v: S.startCash }].concat(S.equity);
+  if (R.lastIss || R.tiActive) pts.push({ t: Date.now(), v: account().equity });
+  const data = []; let lastT = 0;
+  for (const p of pts) { const t = Math.floor(p.t / 1000) + MSK; if (t <= lastT) continue; data.push({ time: t, value: p.v }); lastT = t; }
+  const has = data.length >= 2;
+  $('#eqEmpty').classList.toggle('hidden', has); $('#eqChart').classList.toggle('hidden', !has);
+  if (!has || !window.LightweightCharts) return;
+  if (!R.eqChart) {
+    R.eqChart = LightweightCharts.createChart($('#eqChart'), {
+      autoSize: true, layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#8b98a5', fontSize: 11 },
+      grid: { vertLines: { visible: false }, horzLines: { color: 'rgba(34,48,65,.5)' } },
+      rightPriceScale: { borderColor: '#223041' }, timeScale: { borderColor: '#223041', timeVisible: true },
+      localization: { locale: 'ru-RU', priceFormatter: v => nf(0).format(v) }
+    });
+    R.eqSeries = R.eqChart.addAreaSeries({ lineColor: '#3b8bf6', topColor: 'rgba(59,139,246,.3)', bottomColor: 'rgba(59,139,246,0)', lineWidth: 2 });
+    R.eqSeries.createPriceLine({ price: S.startCash, color: '#8b98a5', lineStyle: 2, lineWidth: 1, axisLabelVisible: false, title: 'старт' });
+  }
+  R.eqSeries.setData(data);
+  R.eqChart.timeScale().fitContent();
+}
+function renderAll() {
+  renderHeader(); renderBanners();
+  if (R.view === 'market') renderMarket();
+  if (R.view === 'trade') { renderTradeHead(); renderBook(); renderOrderForm(); renderTradeSide(); updateLines(); }
+  if (R.view === 'portfolio') renderPortfolio();
+  if (R.view === 'orders') renderOrders();
+  if (R.view === 'report') renderReport();
+}
+
+/* ---------------- навигация и действия ---------------- */
+function showView(v) {
+  R.view = v;
+  $$('.view').forEach(s => s.classList.toggle('active', s.id === 'v-' + v));
+  $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  if (v === 'trade') {
+    if (!R.sel) R.sel = R.universe.find(s => R.meta[s]) || R.universe[0];
+    ensureChart(); if (!R.candles.length || R.chartFor !== R.sel + R.iv) { R.chartFor = R.sel + R.iv; loadChart(); }
+    refreshBook();
+  }
+  renderAll();
+  window.scrollTo(0, 0);
+  try { if (location.hash !== '#' + v) history.replaceState(null, '', '#' + v); } catch (e) {}
+}
+function openSec(id) {
+  if (R.sel !== id) { R.sel = id; R.book = null; R.candles = []; $('#oPrice').value = ''; $('#oTrig').value = ''; }
+  showView('trade');
+}
+async function closePos(id) {
+  const p = S.positions[id]; if (!p || !p.qty) return;
+  const side = p.qty > 0 ? 'sell' : 'buy', lots = Math.abs(p.qty) / lotOf(id);
+  const ord = newOrder({ secid: id, side, type: 'market', lots });
+  const r = await execMarket(id, side, lots, 'market', ord);
+  if (r.err) { ord.status = 'rejected'; ord.reason = r.err; toast(r.err, 'err'); } else { ord.status = 'filled'; ord.filledAt = Date.now(); ord.fillPrice = r.trade.price; }
+  save(); renderAll();
+}
+function toast(msg, kind = '') {
+  const el = document.createElement('div'); el.className = 'toast ' + kind; el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), kind === 'err' ? 6000 : 3800);
+}
+function modal(html) { $('#modalCard').innerHTML = html; $('#modal').classList.remove('hidden'); }
+function closeModal() { $('#modal').classList.add('hidden'); }
+function confirmBox(title, text, okText, onOk) {
+  modal(`<h3>${title}</h3><p>${text}</p><div class="btn-row" style="justify-content:flex-end"><button class="btn" data-m="no">Отмена</button><button class="btn red" data-m="ok">${okText}</button></div>`);
+  $('#modalCard').querySelector('[data-m=no]').onclick = closeModal;
+  $('#modalCard').querySelector('[data-m=ok]').onclick = () => { closeModal(); onOk(); };
+}
+
+function csv() {
+  const head = ['Дата и время (МСК)', 'Тикер', 'Направление', 'Лотов', 'Штук', 'Цена', 'Сумма', 'Комиссия', 'Фин. результат', 'Тип заявки'];
+  const f = n => String(Math.round(n * 1e4) / 1e4).replace('.', ',');
+  const lines = S.trades.map(t => [fmtTime(t.time, true), t.secid, t.side === 'buy' ? 'Покупка' : 'Продажа', t.lots, t.qty, f(t.price), f(t.value), f(t.fee), f(t.realized - (t.realized ? t.fee : 0)), TYPE[t.kind] || t.kind].join(';'));
+  return head.join(';') + '\n' + lines.join('\n');
+}
+function settingsModal() {
+  const st = S.settings;
+  modal(`<h3>Настройки</h3>
+    <div class="card-title" style="margin-top:4px">Источник котировок</div>
+    <label class="opt ${st.source === 'iss' ? 'on' : ''}"><input type="radio" name="src" value="iss" ${st.source === 'iss' ? 'checked' : ''}><div><b>Мосбиржа ISS</b><div class="small muted">Бесплатно, без регистрации. Цены и свечи с задержкой 15 минут.</div></div></label>
+    <label class="opt ${st.source === 'ti' ? 'on' : ''}"><input type="radio" name="src" value="ti" ${st.source === 'ti' ? 'checked' : ''}><div><b>Т-Инвестиции API</b><div class="small muted">Реальное время и полный стакан. Нужен токен «только чтение» (Т-Инвестиции → Настройки → Токены T-Invest API).</div></div></label>
+    <label class="f">Токен T-Invest API<input id="sTok" type="password" autocomplete="off" placeholder="t.xxxxxxxx" value="${esc(st.token)}"></label>
+    <p class="small" style="margin-top:-4px">Токен хранится только в этом браузере и отправляется только на сервер Т-Инвестиций.</p>
+    <div class="card-title">Условия счёта</div>
+    <label class="f">Комиссия брокера, % от суммы сделки<input id="sFee" type="number" inputmode="decimal" step="0.001" min="0" value="${st.feePct}"></label>
+    <label class="f">Плечо (маржинальная торговля)
+      <select id="sLev">${[1, 2, 3, 5].map(l => `<option value="${l}" ${+st.leverage === l ? 'selected' : ''}>${l === 1 ? 'Без плеча (1:1)' : '1:' + l}</option>`).join('')}</select></label>
+    <label class="check"><input id="sShort" type="checkbox" ${st.allowShort ? 'checked' : ''}> Разрешить шорт (продажу без бумаг)</label>
+    <label class="check"><input id="sOff" type="checkbox" ${st.offSession ? 'checked' : ''}> Исполнять сделки вне торговой сессии (только для тренировки)</label>
+    <div class="btn-row" style="justify-content:flex-end;margin:6px 0 14px"><button class="btn" data-m="no">Отмена</button><button class="btn pri" data-m="save">Сохранить</button></div>
+    <div class="card-title">Перенос счёта между устройствами</div>
+    <p>Счёт хранится в браузере. Чтобы продолжить на другом устройстве, скопируй код здесь и вставь его там.</p>
+    <div class="btn-row"><button class="btn" id="bExport">Копировать код счёта</button><button class="btn" id="bImport">Вставить код…</button></div>
+    <div id="impBox" class="hidden" style="margin-top:8px"><textarea id="impText" placeholder="Вставь код счёта"></textarea><div class="btn-row" style="margin-top:6px"><button class="btn pri" id="bImpGo">Загрузить счёт</button></div></div>
+    <div class="card-title" style="margin-top:16px">Сброс</div>
+    <button class="btn red" id="bReset">Начать заново с 400 000 ₽</button>`);
+  const mc = $('#modalCard');
+  mc.querySelectorAll('input[name=src]').forEach(r => r.onchange = () => mc.querySelectorAll('.opt').forEach(o => o.classList.toggle('on', o.querySelector('input').checked)));
+  mc.querySelector('[data-m=no]').onclick = closeModal;
+  mc.querySelector('[data-m=save]').onclick = async () => {
+    const src = mc.querySelector('input[name=src]:checked').value;
+    const tok = $('#sTok').value.trim();
+    if (src === 'ti' && !tok) return toast('Для режима Т-Инвестиций нужен токен', 'err');
+    const fee = parseFloat(String($('#sFee').value).replace(',', '.'));
+    Object.assign(S.settings, { source: src, token: tok, feePct: fee >= 0 ? fee : 0.05, leverage: +$('#sLev').value, allowShort: $('#sShort').checked, offSession: $('#sOff').checked });
+    save(); closeModal();
+    await applySource();
+    renderAll();
+  };
+  $('#bExport').onclick = async () => {
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...S, settings: { ...S.settings, token: '' } }))));
+    try { await navigator.clipboard.writeText(code); toast('Код счёта скопирован', 'ok'); }
+    catch (e) { $('#impBox').classList.remove('hidden'); $('#impText').value = code; $('#impText').select(); toast('Скопируй код из поля вручную'); }
+  };
+  $('#bImport').onclick = () => { $('#impBox').classList.remove('hidden'); $('#impText').value = ''; $('#impText').focus(); };
+  $('#bImpGo').onclick = () => {
+    try {
+      const obj = JSON.parse(decodeURIComponent(escape(atob($('#impText').value.trim()))));
+      if (!obj || obj.v !== 1 || !obj.trades) throw new Error();
+      const tok = S.settings.token, src = S.settings.source;
+      S = Object.assign(defState(), obj); S.settings = Object.assign(defState().settings, obj.settings, { token: tok, source: tok ? src : 'iss' });
+      save(); closeModal(); toast('Счёт загружен', 'ok'); renderAll(); if (R.view === 'report' && R.eqSeries) renderEqChart();
+    } catch (e) { toast('Код не распознан', 'err'); }
+  };
+  $('#bReset').onclick = () => confirmBox('Сбросить счёт?', 'Все сделки, заявки и история будут удалены, баланс снова станет 400 000 ₽. Отменить это нельзя.', 'Сбросить', () => {
+    const keep = S.settings, tm = S.tmap; S = defState(); S.settings = keep; S.tmap = tm; save();
+    if (R.eqChart) { R.eqChart.remove(); R.eqChart = null; R.eqSeries = null; }
+    toast('Счёт открыт заново: 400 000 ₽', 'ok'); renderAll();
+  });
+}
+
+async function applySource() {
+  R.tiActive = false; R.tiErr = null; setMsg('ti');
+  if (S.settings.source === 'ti' && S.settings.token) {
+    try {
+      await tiResolve(); await tiPrices(); await tiStatuses().catch(() => {});
+      R.tiActive = true;
+      setMsg('ti', 'Подключены Т-Инвестиции: цены, свечи и стакан в реальном времени.', 'info');
+      setTimeout(() => { if (R.msgs.ti?.kind === 'info') { setMsg('ti'); renderBanners(); } }, 5000);
+    } catch (e) {
+      R.tiErr = e.message;
+      setMsg('ti', `Не удалось подключить Т-Инвестиции: ${esc(e.message)}. Работаю на данных биржи с задержкой 15 минут.`, 'err');
+    }
+  }
+  if (R.view === 'trade') { R.chartFor = null; loadChart(); refreshBook(); }
+}
+async function refreshBook() {
+  if (!R.tiActive || !R.sel) return;
+  try { R.book = await tiBook(R.sel, 10); const q = quote(R.sel); if (R.book.asks[0]) q.ask = R.book.asks[0].p; if (R.book.bids[0]) q.bid = R.book.bids[0].p; } catch (e) {}
+  if (R.view === 'trade') { renderBook(); renderOrderForm(); }
+}
+
+/* ---------------- события ---------------- */
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) showView(b.dataset.view); });
+$('#mktList').addEventListener('click', e => { const r = e.target.closest('.row[data-sec]'); if (r) openSec(r.dataset.sec); });
+$('#tSec').addEventListener('change', e => openSec(e.target.value));
+$('#ivBar').addEventListener('click', e => {
+  const b = e.target.closest('button[data-iv]'); if (!b) return;
+  R.iv = +b.dataset.iv; $$('#ivBar button').forEach(x => x.classList.toggle('active', x === b));
+  R.chartFor = R.sel + R.iv; loadChart();
+});
+$$('.seg.side button').forEach(b => b.onclick = () => { R.side = b.dataset.side; $$('.seg.side button').forEach(x => x.classList.toggle('active', x === b)); renderOrderForm(); });
+$$('.seg.otype button').forEach(b => b.onclick = () => {
+  R.ot = b.dataset.ot; $$('.seg.otype button').forEach(x => x.classList.toggle('active', x === b));
+  $('#lblPrice').classList.toggle('hidden', R.ot !== 'limit'); $('#lblTrig').classList.toggle('hidden', R.ot !== 'stop'); $('#stopHint').classList.toggle('hidden', R.ot !== 'stop');
+  const q = quote(R.sel);
+  if (R.ot === 'limit' && !$('#oPrice').value && q.last) $('#oPrice').value = q.last;
+  if (R.ot === 'stop' && !$('#oTrig').value && q.last) $('#oTrig').value = q.last;
+  renderOrderForm();
+});
+['#oLots', '#oPrice', '#oTrig'].forEach(s => $(s).addEventListener('input', renderOrderForm));
+$('#qMinus').onclick = () => { $('#oLots').value = Math.max(1, (parseInt($('#oLots').value, 10) || 1) - 1); renderOrderForm(); };
+$('#qPlus').onclick = () => { $('#oLots').value = (parseInt($('#oLots').value, 10) || 0) + 1; renderOrderForm(); };
+$$('.pct button').forEach(b => b.onclick = () => {
+  const id = R.sel, p = S.positions[id], k = +b.dataset.pct / 100, lot = lotOf(id);
+  const reduce = p && ((R.side === 'sell' && p.qty > 0) || (R.side === 'buy' && p.qty < 0));
+  const base = reduce ? Math.abs(p.qty) / lot : maxLots(id, R.side, orderPriceEstimate());
+  $('#oLots').value = Math.max(1, Math.floor(base * k));
+  renderOrderForm();
+});
+$('#oSubmit').onclick = submitOrder;
+$('#book').addEventListener('click', e => {
+  const td = e.target.closest('td.p'); if (!td) return;
+  const v = parseFloat(td.textContent.replace(/\s/g, '').replace(',', '.')); if (!(v > 0)) return;
+  $$('.seg.otype button')[1].click(); $('#oPrice').value = v; renderOrderForm();
+});
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-cancel]');
+  if (c) { const o = S.orders.find(x => x.id === +c.dataset.cancel); if (o && o.status === 'active') { o.status = 'cancelled'; o.cancelledAt = Date.now(); save(); toast(`Заявка №${o.id} снята`); renderAll(); } return; }
+  const cl = e.target.closest('[data-close]');
+  if (cl) { const id = cl.dataset.close; confirmBox('Закрыть позицию?', `${esc(id)}: рыночная заявка на весь объём позиции.`, 'Закрыть', () => closePos(id)); return; }
+  const op = e.target.closest('[data-open]');
+  if (op) { e.preventDefault(); openSec(op.dataset.open); }
+});
+$('#btnCloseAll').onclick = () => confirmBox('Закрыть все позиции?', 'По каждой бумаге будет отправлена рыночная заявка на весь объём.', 'Закрыть всё', async () => { for (const id of Object.keys(S.positions)) await closePos(id); });
+$('#ordTabs').addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if (b) { R.ordTab = b.dataset.t; renderOrders(); } });
+$('#btnSettings').onclick = settingsModal;
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+$('#btnCsv').onclick = () => {
+  try {
+    const blob = new Blob(['﻿' + csv()], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `moex-paper-сделки-${mskDate(Date.now())}.csv`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  } catch (e) { toast('Не получилось скачать — используй «Копировать»', 'err'); }
+};
+$('#btnCopyCsv').onclick = async () => { try { await navigator.clipboard.writeText(csv()); toast('Журнал скопирован — вставь в Excel', 'ok'); } catch (e) { toast('Буфер обмена недоступен', 'err'); } };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { tickNow(); catchUp().then(renderAll); } });
+
+/* ---------------- цикл обновления ---------------- */
+let tick = 0;
+const busy = {};
+async function job(name, fn) { if (busy[name]) return; busy[name] = true; try { await fn(); } catch (e) { if (name.startsWith('ti')) { console.warn(name, e); if (/токен|CORS|сеть/.test(e.message)) { R.tiActive = false; setMsg('ti', `Связь с Т-Инвестициями потеряна: ${esc(e.message)}. Переключился на ISS (задержка 15 мин).`, 'err'); } } else console.warn(name, e); } finally { busy[name] = false; } }
+async function tickNow() {
+  if (R.tiActive) {
+    await Promise.all([job('tiPrices', tiPrices), (tick % 20 === 0) ? job('iss', issQuotes) : null, (tick % 40 === 0) ? job('tiStatus', tiStatuses) : null]);
+    if (R.view === 'trade') await job('tiBook', refreshBook);
+  } else if (tick % 6 === 0) await job('iss', issQuotes);
+  await job('orders', processOrders);
+  snapEquity(false);
+  renderAll();
+}
+async function start() {
+  if (location.hash && ['market', 'trade', 'portfolio', 'orders', 'report'].includes(location.hash.slice(1))) R.view = location.hash.slice(1);
+  if (!window.LightweightCharts) setMsg('lib', 'Не загрузилась библиотека графиков (нужен интернет). Торговать можно, графики не покажутся.', 'warn');
+  await loadUniverse();
+  await issQuotes();
+  if (!S.trades.length && !S.orders.length && S.equity.length === 0) setMsg('hello', `Демо-счёт открыт: <b>400 000 ₽</b>. Торгуются голубые фишки Мосбиржи (TQBR). Цены — с биржи; заявки исполняются по рыночным ценам, как в терминале.`, 'info');
+  await applySource();
+  R.sel = R.universe.find(s => R.meta[s]) || R.universe[0];
+  showView(R.view);
+  catchUp().then(renderAll);
+  setInterval(() => { tick++; tickNow(); }, 1500);
+  setInterval(() => { if (R.msgs.hello && S.trades.length) { setMsg('hello'); renderBanners(); } }, 3000);
+  setInterval(() => catchUp(), 5 * 60 * 1000);
+}
+start();
+</script>
+</body>
+</html>
