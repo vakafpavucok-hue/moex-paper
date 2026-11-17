@@ -272,7 +272,7 @@ function defState() {
   return {
     v: 1, createdAt: Date.now(), startCash: START_CASH, cash: START_CASH,
     positions: {}, orders: [], trades: [], equity: [], seq: 1, oseq: 1,
-    settings: { source: 'iss', token: '', feePct: 0.05, leverage: 1, allowShort: true, offSession: false },
+    settings: { source: 'iss', token: '', finamKey: '', feePct: 0.05, leverage: 1, allowShort: true, offSession: false },
     tmap: {}
   };
 }
@@ -467,6 +467,94 @@ async function tiCandles(id, iv, fromSec) {
   return (j.candles || []).map(c => ({ t: Date.parse(c.time) / 1000, o: qv(c.open), h: qv(c.high), l: qv(c.low), c: qv(c.close), v: Number(c.volume) }));
 }
 
+/* ---------------- сеть: Финам Trade API (по ключу) ---------------- */
+const FIN_BASE = 'https://api.finam.ru';
+const dv = x => { if (x == null) return null; const v = parseFloat(typeof x === 'object' ? x.value : x); return isFinite(v) ? v : null; };
+const tsv = x => { if (!x) return null; if (typeof x === 'string') return Date.parse(x) / 1000; if (x.seconds != null) return Number(x.seconds) + (x.nanos || 0) / 1e9; return null; };
+const FIN_NET = 'браузер не смог обратиться к API Финама (сеть или CORS)';
+const FIN = {
+  name: 'Финам', jwt: null, jwtAt: 0, auth: null, rr: 0, bookUnit: '',
+  span: { 1: 86400, 10: 2 * 86400, 60: 14 * 86400, 24: 365 * 86400 },
+  async session() {
+    let r;
+    try { r = await fetch(FIN_BASE + '/v1/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: S.settings.finamKey.trim() }) }); }
+    catch (e) { throw new Error(FIN_NET); }
+    if (!r.ok) throw new Error(r.status >= 400 && r.status < 500 ? 'ключ не принят (' + r.status + ')' : 'HTTP ' + r.status);
+    const j = await r.json();
+    if (!j.token) throw new Error('ключ не принят');
+    this.jwt = j.token; this.jwtAt = Date.now();
+  },
+  async get(path) {
+    if (!this.jwt || Date.now() - this.jwtAt > 8 * 60e3) await this.session();
+    const go = h => fetch(FIN_BASE + path, { headers: { 'Authorization': h, 'Accept': 'application/json' } });
+    let r;
+    try { r = await go(this.auth === 'bearer' ? 'Bearer ' + this.jwt : this.jwt); } catch (e) { throw new Error(FIN_NET); }
+    if ((r.status === 401 || r.status === 403) && !this.auth) { try { r = await go('Bearer ' + this.jwt); } catch (e) { throw new Error(FIN_NET); } if (r.ok) this.auth = 'bearer'; }
+    else if (r.ok && !this.auth) this.auth = 'raw';
+    if (r.status === 401) { this.jwt = null; throw new Error('ключ не принят (401)'); }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  },
+  sym: id => encodeURIComponent(id + '@MISX'),
+  async init() { this.jwt = null; this.auth = null; await this.session(); await this.prices(true); },
+  async quote1(id) {
+    const j = await this.get(`/v1/instruments/${this.sym(id)}/quotes/latest`);
+    const qq = j.quote || j; const last = dv(qq.last); if (!last) return false;
+    const q = R.quotes[id] || (R.quotes[id] = {});
+    q.tiLast = last; q.last = last; q.src = 'fin';
+    q.t = tsv(qq.timestamp) || Date.now() / 1000;
+    const b = dv(qq.bid), a = dv(qq.ask);
+    if (!(id === R.sel && R.book)) { q.bid = b || null; q.ask = a || null; }
+    for (const k of ['open', 'high', 'low']) { const v = dv(qq[k]); if (v) q[k] = v; }
+    R.status[id] = (Date.now() / 1000 - q.t) < 180 || q.issStatus === 'T';
+    if (id === R.sel) liveCandle(last, q.t);
+    return true;
+  },
+  async prices(all) {
+    const ids = R.universe.filter(s => R.meta[s] || all);
+    let list;
+    if (all) list = ids;
+    else { list = new Set(R.sel ? [R.sel] : []); for (let i = 0; i < 3 && ids.length; i++) list.add(ids[(this.rr++) % ids.length]); list = [...list]; }
+    let ok = 0, fatal = null;
+    await Promise.all(list.map(async id => { try { if (await this.quote1(id)) ok++; } catch (e) { if (/ключ|CORS|сеть/.test(e.message)) fatal = e; } }));
+    if (fatal) throw fatal;
+    if (all && !ok) throw new Error('Финам не вернул котировки (проверь, что ключ от Trade API)');
+  },
+  async book(id) {
+    const j = await this.get(`/v1/instruments/${this.sym(id)}/orderbook`);
+    const rows = (j.orderbook || j).rows || [];
+    const asks = [], bids = [];
+    for (const r of rows) {
+      const p = dv(r.price); if (!p) continue;
+      const ss = dv(r.sell_size ?? r.sellSize), bs = dv(r.buy_size ?? r.buySize);
+      if (ss > 0) asks.push({ p, q: ss }); if (bs > 0) bids.push({ p, q: bs });
+    }
+    asks.sort((a, b) => a.p - b.p); bids.sort((a, b) => b.p - a.p);
+    return { asks, bids, t: Date.now() };
+  },
+  async candles(id, iv, fromSec) {
+    const tf = { 1: 'TIME_FRAME_M1', 10: 'TIME_FRAME_M5', 60: 'TIME_FRAME_H1', 24: 'TIME_FRAME_D' }[iv];
+    const to = Math.floor(Date.now() / 1000) + 60, from = Math.max(fromSec, to - this.span[iv]);
+    const iso = t => new Date(t * 1000).toISOString().replace('.000', '');
+    const j = await this.get(`/v1/instruments/${this.sym(id)}/bars?timeframe=${tf}&interval.start_time=${iso(from)}&interval.end_time=${iso(to)}`);
+    const cs = (j.bars || []).map(b => ({ t: tsv(b.timestamp), o: dv(b.open), h: dv(b.high), l: dv(b.low), c: dv(b.close), v: dv(b.volume) || 0 })).filter(c => c.t && c.o > 0);
+    return iv === 10 ? aggregate(cs, 10) : cs;
+  }
+};
+const TI = { name: 'Т-Инвестиции', bookUnit: 'лотах', span: TI_SPAN,
+  async init() { await tiResolve(); await tiPrices(); await tiStatuses().catch(() => {}); },
+  prices: () => tiPrices(), statuses: () => tiStatuses(), book: (id, d) => tiBook(id, d), candles: (id, iv, f) => tiCandles(id, iv, f) };
+let P = null;
+function aggregate(cs, iv) {
+  const out = [];
+  for (const c of cs.sort((a, b) => a.t - b.t)) {
+    const k = bucket(c.t, iv), last = out[out.length - 1];
+    if (last && last.t === k) { last.h = Math.max(last.h, c.h); last.l = Math.min(last.l, c.l); last.c = c.c; last.v += c.v; }
+    else out.push({ t: k, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
+  }
+  return out;
+}
+
 /* ---------------- свечи ---------------- */
 function bucket(t, iv) { return iv === 24 ? Math.floor((t + MSK) / 86400) * 86400 - MSK : Math.floor(t / (iv * 60)) * iv * 60; }
 function mergeCandles(a, b, iv) {
@@ -478,14 +566,14 @@ async function getCandles(id, iv) {
   let iss = [];
   try { iss = await issCandlesLatest(id, iv); } catch (e) { console.warn('iss candles', e); }
   let tic = [];
-  if (R.tiActive) { try { tic = await tiCandles(id, iv, Math.floor(Date.now() / 1000) - TI_SPAN[iv]); } catch (e) { console.warn('ti candles', e); } }
+  if (R.tiActive && P) { try { tic = await P.candles(id, iv, Math.floor(Date.now() / 1000) - P.span[iv]); } catch (e) { console.warn('rt candles', e); } }
   return mergeCandles(iss, tic, iv);
 }
 async function candlesSince(id, fromSec) {
   let iss = [];
   try { iss = await issCandlesRange(id, 1, fromSec); } catch (e) { console.warn(e); }
   let tic = [];
-  if (R.tiActive) { try { tic = await tiCandles(id, 1, fromSec); } catch (e) {} }
+  if (R.tiActive && P) { try { tic = await P.candles(id, 1, fromSec); } catch (e) {} }
   return mergeCandles(iss, tic, 1).filter(c => c.t >= fromSec);
 }
 
@@ -566,7 +654,7 @@ function vwap(levels, lots) {
 }
 async function marketPrice(id, side, lots) {
   if (R.tiActive) {
-    try { const b = await tiBook(id, 20); if (id === R.sel) R.book = b; const p = vwap(side === 'buy' ? b.asks : b.bids, lots); if (p) return p; } catch (e) {}
+    try { const b = await P.book(id, 20); if (id === R.sel) R.book = b; const p = vwap(side === 'buy' ? b.asks : b.bids, lots); if (p) return p; } catch (e) {}
   }
   const q = quote(id);
   return side === 'buy' ? (q.ask || q.last) : (q.bid || q.last);
@@ -781,7 +869,7 @@ function renderHeader() {
   $('#hEq').textContent = money(a.equity);
   const h = $('#hPnl'); h.textContent = smoney(a.pnl) + ' · ' + pct(a.pnl / S.startCash); h.className = 'small num ' + (cls(a.pnl) || 'muted');
   const b = $('#srcBadge');
-  if (R.tiActive) { b.textContent = 'онлайн'; b.className = 'badge rt'; b.title = 'Т-Инвестиции, реальное время'; }
+  if (R.tiActive) { b.textContent = 'онлайн'; b.className = 'badge rt'; b.title = (P ? P.name : '') + ', реальное время'; }
   else { b.textContent = '−15 мин'; b.className = 'badge'; b.title = 'ISS Мосбиржи, задержка 15 минут'; }
 }
 function renderMarket() {
@@ -823,11 +911,11 @@ function renderBook() {
     const mx = Math.max(1, ...asks.map(a => a.q), ...bids.map(b => b.q));
     const row = (o, k) => `<tr class="${k}"><td class="p num">${px(o.p, id)}</td><td class="q num">${nf(0).format(o.q)}<span class="bar" style="width:${Math.round(o.q / mx * 100)}%;background:${k === 'a' ? 'var(--dn)' : 'var(--up)'}"></span></td></tr>`;
     const spread = asks.length && bids.length ? R.book.asks[0].p - R.book.bids[0].p : null;
-    el.innerHTML = `<table>${asks.map(a => row(a, 'a')).join('')}<tr class="mid"><td colspan="2">спред ${px(spread, id)}</td></tr>${bids.map(b => row(b, 'b')).join('')}</table><div class="small muted" style="margin-top:6px">Объём в лотах. Нажми на цену, чтобы подставить её в лимитную заявку.</div>`;
+    el.innerHTML = `<table>${asks.map(a => row(a, 'a')).join('')}<tr class="mid"><td colspan="2">спред ${px(spread, id)}</td></tr>${bids.map(b => row(b, 'b')).join('')}</table><div class="small muted" style="margin-top:6px">${P && P.bookUnit ? 'Объём в ' + P.bookUnit + '. ' : ''}Нажми на цену, чтобы подставить её в лимитную заявку.</div>`;
   } else {
     $('#bookNote').textContent = R.tiActive ? '' : 'ISS · задержка 15 мин';
     el.innerHTML = `<table><tr class="a"><td>Лучшая продажа (Ask)</td><td class="p num" style="text-align:right">${px(q.ask, id)}</td></tr><tr class="b"><td>Лучшая покупка (Bid)</td><td class="p num" style="text-align:right">${px(q.bid, id)}</td></tr></table>
-      <div class="small muted" style="margin-top:6px">Полный стакан в реальном времени доступен в режиме Т-Инвестиций (⚙︎ → источник данных).</div>`;
+      <div class="small muted" style="margin-top:6px">Полный стакан в реальном времени доступен с ключом Финама или токеном Т-Инвестиций (⚙︎ → источник котировок).</div>`;
   }
 }
 function orderPriceEstimate() {
@@ -1010,8 +1098,10 @@ function settingsModal() {
     <div class="card-title" style="margin-top:4px">Источник котировок</div>
     <label class="opt ${st.source === 'iss' ? 'on' : ''}"><input type="radio" name="src" value="iss" ${st.source === 'iss' ? 'checked' : ''}><div><b>Мосбиржа ISS</b><div class="small muted">Бесплатно, без регистрации. Цены и свечи с задержкой 15 минут.</div></div></label>
     <label class="opt ${st.source === 'ti' ? 'on' : ''}"><input type="radio" name="src" value="ti" ${st.source === 'ti' ? 'checked' : ''}><div><b>Т-Инвестиции API</b><div class="small muted">Реальное время и полный стакан. Нужен токен «только чтение» (Т-Инвестиции → Настройки → Токены T-Invest API).</div></div></label>
-    <label class="f">Токен T-Invest API<input id="sTok" type="password" autocomplete="off" placeholder="t.xxxxxxxx" value="${esc(st.token)}"></label>
-    <p class="small" style="margin-top:-4px">Токен хранится только в этом браузере и отправляется только на сервер Т-Инвестиций.</p>
+    <label class="opt ${st.source === 'finam' ? 'on' : ''}"><input type="radio" name="src" value="finam" ${st.source === 'finam' ? 'checked' : ''}><div><b>Финам Trade API</b><div class="small muted">Реальное время и стакан. Нужен ключ из личного кабинета Finam Trade (tradeapi.finam.ru → Токены), подойдёт и демо-счёт.</div></div></label>
+    <label class="f" id="wTok">Токен T-Invest API<input id="sTok" type="password" autocomplete="off" placeholder="t.xxxxxxxx" value="${esc(st.token)}"></label>
+    <label class="f" id="wFin">Ключ (secret) Finam Trade API<input id="sFin" type="password" autocomplete="off" placeholder="вставь ключ" value="${esc(st.finamKey)}"></label>
+    <p class="small" style="margin-top:-4px">Ключи хранятся только в этом браузере и отправляются только на сервер выбранного брокера.</p>
     <div class="card-title">Условия счёта</div>
     <label class="f">Комиссия брокера, % от суммы сделки<input id="sFee" type="number" inputmode="decimal" step="0.001" min="0" value="${st.feePct}"></label>
     <label class="f">Плечо (маржинальная торговля)
@@ -1026,20 +1116,22 @@ function settingsModal() {
     <div class="card-title" style="margin-top:16px">Сброс</div>
     <button class="btn red" id="bReset">Начать заново с 400 000 ₽</button>`);
   const mc = $('#modalCard');
-  mc.querySelectorAll('input[name=src]').forEach(r => r.onchange = () => mc.querySelectorAll('.opt').forEach(o => o.classList.toggle('on', o.querySelector('input').checked)));
+  const syncSrc = () => { const v = mc.querySelector('input[name=src]:checked').value; mc.querySelectorAll('.opt').forEach(o => o.classList.toggle('on', o.querySelector('input').checked)); $('#wTok').classList.toggle('hidden', v !== 'ti'); $('#wFin').classList.toggle('hidden', v !== 'finam'); };
+  mc.querySelectorAll('input[name=src]').forEach(r => r.onchange = syncSrc); syncSrc();
   mc.querySelector('[data-m=no]').onclick = closeModal;
   mc.querySelector('[data-m=save]').onclick = async () => {
     const src = mc.querySelector('input[name=src]:checked').value;
-    const tok = $('#sTok').value.trim();
+    const tok = $('#sTok').value.trim(), fk = $('#sFin').value.trim();
     if (src === 'ti' && !tok) return toast('Для режима Т-Инвестиций нужен токен', 'err');
+    if (src === 'finam' && !fk) return toast('Вставь ключ Finam Trade API', 'err');
     const fee = parseFloat(String($('#sFee').value).replace(',', '.'));
-    Object.assign(S.settings, { source: src, token: tok, feePct: fee >= 0 ? fee : 0.05, leverage: +$('#sLev').value, allowShort: $('#sShort').checked, offSession: $('#sOff').checked });
+    Object.assign(S.settings, { source: src, token: tok, finamKey: fk, feePct: fee >= 0 ? fee : 0.05, leverage: +$('#sLev').value, allowShort: $('#sShort').checked, offSession: $('#sOff').checked });
     save(); closeModal();
     await applySource();
     renderAll();
   };
   $('#bExport').onclick = async () => {
-    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...S, settings: { ...S.settings, token: '' } }))));
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...S, settings: { ...S.settings, token: '', finamKey: '' } }))));
     try { await navigator.clipboard.writeText(code); toast('Код счёта скопирован', 'ok'); }
     catch (e) { $('#impBox').classList.remove('hidden'); $('#impText').value = code; $('#impText').select(); toast('Скопируй код из поля вручную'); }
   };
@@ -1048,8 +1140,8 @@ function settingsModal() {
     try {
       const obj = JSON.parse(decodeURIComponent(escape(atob($('#impText').value.trim()))));
       if (!obj || obj.v !== 1 || !obj.trades) throw new Error();
-      const tok = S.settings.token, src = S.settings.source;
-      S = Object.assign(defState(), obj); S.settings = Object.assign(defState().settings, obj.settings, { token: tok, source: tok ? src : 'iss' });
+      const keep = { token: S.settings.token, finamKey: S.settings.finamKey, source: S.settings.source };
+      S = Object.assign(defState(), obj); S.settings = Object.assign(defState().settings, obj.settings, keep);
       save(); closeModal(); toast('Счёт загружен', 'ok'); renderAll(); if (R.view === 'report' && R.eqSeries) renderEqChart();
     } catch (e) { toast('Код не распознан', 'err'); }
   };
@@ -1061,23 +1153,24 @@ function settingsModal() {
 }
 
 async function applySource() {
-  R.tiActive = false; R.tiErr = null; setMsg('ti');
-  if (S.settings.source === 'ti' && S.settings.token) {
+  R.tiActive = false; R.tiErr = null; R.status = {}; R.book = null; setMsg('ti');
+  P = S.settings.source === 'ti' && S.settings.token ? TI : S.settings.source === 'finam' && S.settings.finamKey ? FIN : null;
+  if (P) {
     try {
-      await tiResolve(); await tiPrices(); await tiStatuses().catch(() => {});
+      await P.init();
       R.tiActive = true;
-      setMsg('ti', 'Подключены Т-Инвестиции: цены, свечи и стакан в реальном времени.', 'info');
+      setMsg('ti', `Подключено: ${P.name}. Цены, свечи и стакан в реальном времени.`, 'info');
       setTimeout(() => { if (R.msgs.ti?.kind === 'info') { setMsg('ti'); renderBanners(); } }, 5000);
     } catch (e) {
       R.tiErr = e.message;
-      setMsg('ti', `Не удалось подключить Т-Инвестиции: ${esc(e.message)}. Работаю на данных биржи с задержкой 15 минут.`, 'err');
+      setMsg('ti', `Не удалось подключить ${P.name}: ${esc(e.message)}. Работаю на данных биржи с задержкой 15 минут.`, 'err');
     }
   }
   if (R.view === 'trade') { R.chartFor = null; loadChart(); refreshBook(); }
 }
 async function refreshBook() {
-  if (!R.tiActive || !R.sel) return;
-  try { R.book = await tiBook(R.sel, 10); const q = quote(R.sel); if (R.book.asks[0]) q.ask = R.book.asks[0].p; if (R.book.bids[0]) q.bid = R.book.bids[0].p; } catch (e) {}
+  if (!R.tiActive || !P || !R.sel) return;
+  try { R.book = await P.book(R.sel, 10); const q = quote(R.sel); if (R.book.asks[0]) q.ask = R.book.asks[0].p; if (R.book.bids[0]) q.bid = R.book.bids[0].p; } catch (e) {}
   if (R.view === 'trade') { renderBook(); renderOrderForm(); }
 }
 
@@ -1140,10 +1233,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { ti
 /* ---------------- цикл обновления ---------------- */
 let tick = 0;
 const busy = {};
-async function job(name, fn) { if (busy[name]) return; busy[name] = true; try { await fn(); } catch (e) { if (name.startsWith('ti')) { console.warn(name, e); if (/токен|CORS|сеть/.test(e.message)) { R.tiActive = false; setMsg('ti', `Связь с Т-Инвестициями потеряна: ${esc(e.message)}. Переключился на ISS (задержка 15 мин).`, 'err'); } } else console.warn(name, e); } finally { busy[name] = false; } }
+async function job(name, fn) { if (busy[name]) return; busy[name] = true; try { await fn(); } catch (e) { if (name.startsWith('ti')) { console.warn(name, e); if (/токен|ключ|CORS|сеть/.test(e.message)) { R.tiActive = false; setMsg('ti', `Связь с источником «${P ? P.name : ''}» потеряна: ${esc(e.message)}. Переключился на ISS (задержка 15 мин).`, 'err'); } } else console.warn(name, e); } finally { busy[name] = false; } }
 async function tickNow() {
   if (R.tiActive) {
-    await Promise.all([job('tiPrices', tiPrices), (tick % 20 === 0) ? job('iss', issQuotes) : null, (tick % 40 === 0) ? job('tiStatus', tiStatuses) : null]);
+    await Promise.all([job('tiPrices', () => P.prices()), (tick % 20 === 0) ? job('iss', issQuotes) : null, (tick % 40 === 0 && P.statuses) ? job('tiStatus', () => P.statuses()) : null]);
     if (R.view === 'trade') await job('tiBook', refreshBook);
   } else if (tick % 6 === 0) await job('iss', issQuotes);
   await job('orders', processOrders);
