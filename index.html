@@ -481,15 +481,17 @@ const FIN_BASE = 'https://api.finam.ru';
 const dv = x => { if (x == null) return null; const v = parseFloat(typeof x === 'object' ? x.value : x); return isFinite(v) ? v : null; };
 const tsv = x => { if (!x) return null; if (typeof x === 'string') return Date.parse(x) / 1000; if (x.seconds != null) return Number(x.seconds) + (x.nanos || 0) / 1e9; return null; };
 const FIN_NET = 'сервер Финама не отвечает из этой сети (сеть или CORS)';
+const cleanKey = k => String(k || '').replace(/[\s\u200B-\u200D\u2060\uFEFF"'«»“”‘’]/g, '');
+const keyHint = k => { const c = cleanKey(k); return c ? `${c.length} симв., …${c.slice(-4)}` : 'пусто'; };
 async function fetchT(url, opts, ms = 15000) { const c = new AbortController(), t = setTimeout(() => c.abort(), ms); try { return await fetch(url, { ...opts, signal: c.signal }); } finally { clearTimeout(t); } }
 const FIN = {
   name: 'Финам', jwt: null, jwtAt: 0, auth: null, rr: 0, bookUnit: '', account: null, delay: null,
   span: { 1: 86400, 10: 2 * 86400, 60: 14 * 86400, 24: 365 * 86400 },
   async session() {
     let r;
-    try { r = await fetchT(FIN_BASE + '/v1/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: S.settings.finamKey.trim() }) }); }
+    try { r = await fetchT(FIN_BASE + '/v1/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret: cleanKey(S.settings.finamKey) }) }); }
     catch (e) { throw new Error(FIN_NET); }
-    if (!r.ok) throw new Error(r.status >= 400 && r.status < 500 ? 'ключ не принят сервером Финама (' + r.status + ') — проверь, что он скопирован целиком' : 'HTTP ' + r.status);
+    if (!r.ok) throw new Error(r.status >= 400 && r.status < 500 ? `ключ не принят сервером Финама (${r.status}). Вставлен ключ: ${keyHint(S.settings.finamKey)} — сравни длину и последние 4 символа с ключом в кабинете Финама` : 'HTTP ' + r.status);
     const j = await r.json();
     if (!j.token) throw new Error('ключ не принят');
     this.jwt = j.token; this.jwtAt = Date.now();
@@ -1151,7 +1153,8 @@ function settingsModal() {
     <label class="opt ${st.source === 'ti' ? 'on' : ''}"><input type="radio" name="src" value="ti" ${st.source === 'ti' ? 'checked' : ''}><div><b>Т-Инвестиции API</b><div class="small muted">Реальное время и полный стакан. Нужен токен «только чтение» (Т-Инвестиции → Настройки → Токены T-Invest API).</div></div></label>
     <label class="opt ${st.source === 'finam' ? 'on' : ''}"><input type="radio" name="src" value="finam" ${st.source === 'finam' ? 'checked' : ''}><div><b>Финам Trade API</b><div class="small muted">Реальное время и стакан. Нужен ключ из личного кабинета Finam Trade (tradeapi.finam.ru → Токены), подойдёт и демо-счёт.</div></div></label>
     <label class="f" id="wTok">Токен T-Invest API<input id="sTok" type="password" autocomplete="off" placeholder="t.xxxxxxxx" value="${esc(st.token)}"></label>
-    <label class="f" id="wFin">Ключ (secret) Finam Trade API<input id="sFin" type="password" autocomplete="off" placeholder="вставь ключ" value="${esc(st.finamKey)}"></label>
+    <label class="f" id="wFin">Ключ (secret) Finam Trade API<input id="sFin" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="вставь ключ" value="${esc(st.finamKey)}" style="font:12px/1.3 ui-monospace,monospace">
+      <span class="small" id="sFinHint" style="display:block;margin-top:4px">Сейчас: ${esc(keyHint(st.finamKey))}</span></label>
     <p class="small" style="margin-top:-4px">Ключи хранятся только в этом браузере и отправляются только на сервер выбранного брокера.</p>
     <div class="card-title">Условия счёта</div>
     <label class="f">Комиссия брокера, % от суммы сделки<input id="sFee" type="number" inputmode="decimal" step="0.001" min="0" value="${st.feePct}"></label>
@@ -1169,10 +1172,11 @@ function settingsModal() {
   const mc = $('#modalCard');
   const syncSrc = () => { const v = mc.querySelector('input[name=src]:checked').value; mc.querySelectorAll('.opt').forEach(o => o.classList.toggle('on', o.querySelector('input').checked)); $('#wTok').classList.toggle('hidden', v !== 'ti'); $('#wFin').classList.toggle('hidden', v !== 'finam'); };
   mc.querySelectorAll('input[name=src]').forEach(r => r.onchange = syncSrc); syncSrc();
+  $('#sFin').addEventListener('input', () => { $('#sFinHint').textContent = 'Сейчас: ' + keyHint($('#sFin').value); });
   mc.querySelector('[data-m=no]').onclick = closeModal;
   mc.querySelector('[data-m=save]').onclick = async () => {
     const src = mc.querySelector('input[name=src]:checked').value;
-    const tok = $('#sTok').value.trim(), fk = $('#sFin').value.trim();
+    const tok = $('#sTok').value.trim(), fk = cleanKey($('#sFin').value);
     if (src === 'ti' && !tok) return toast('Для режима Т-Инвестиций нужен токен', 'err');
     if (src === 'finam' && !fk) return toast('Вставь ключ Finam Trade API', 'err');
     const fee = parseFloat(String($('#sFee').value).replace(',', '.'));
